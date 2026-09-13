@@ -1,0 +1,49 @@
+{
+  "name": "apptesterclub",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.0",
+    "jose": "^6.2.12",
+    "next": "16.3.4",
+    "qrcode": "^1.5.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "description": "Self-hosted build distribution. Push a build, install it on a device.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aditya-28/apptesterclub.git"
+  },
+  "keywords": [
+    "ios",
+    "android",
+    "testflight",
+    "ota",
+    "app-distribution",
+    "self-hosted",
+    "ipa",
+    "apk"
+  ],
+  "bin": {
+    "atc": "./scripts/atc.mjs"
+  }
+}
