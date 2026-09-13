@@ -12,10 +12,25 @@ That is the whole command. Version, build number, bundle identifier, icon,
 minimum OS and the entire signing profile are read out of the binary. You get
 back an install link and a QR code.
 
-> **Status: early.** It works — it has been running in production for one
-> developer across iOS, Android and macOS — but it currently only deploys to
-> Vercel, and the upload tool only runs on macOS. Both are being fixed. See
-> [ROADMAP.md](ROADMAP.md).
+## Deploy your own
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Faditya-28%2Fapptesterclub&project-name=apptesterclub&repository-name=apptesterclub&env=ATC_PASSWORD%2CATC_UPLOAD_TOKEN&envDescription=A%20password%20for%20the%20web%20pages%2C%20and%20a%20token%20the%20CLI%20and%20phone%20app%20use.%20Generate%20the%20token%20with%3A%20openssl%20rand%20-hex%2024&envLink=https%3A%2F%2Fgithub.com%2Faditya-28%2Fapptesterclub%2Fblob%2Fmain%2F.env.example&demo-title=AppTesterClub&demo-description=Self-hosted%20build%20distribution.%20Push%20a%20build%2C%20install%20it%20on%20a%20device.&demo-url=https%3A%2F%2Fgithub.com%2Faditya-28%2Fapptesterclub&stores=%5B%7B%22type%22%3A%22blob%22%7D%5D)
+
+One click. Vercel clones the repository, creates the project, **provisions the
+blob store for you**, and asks for two values:
+
+| | |
+|---|---|
+| `ATC_PASSWORD` | Password for the web pages. Pick anything. |
+| `ATC_UPLOAD_TOKEN` | What the CLI and phone app authenticate with. Generate one: `openssl rand -hex 24` |
+
+That is the whole setup. The free tier is enough for one developer, and TLS —
+which iOS requires for over-the-air install — comes with it.
+
+> **Status: early but working.** In production for one developer across iOS,
+> Android and macOS. Two known limits: the upload tool needs macOS, because it
+> reads IPAs with `plutil` and friends, and Vercel is the only deployment
+> target. See [ROADMAP.md](ROADMAP.md).
 
 ## The part other tools get wrong
 
@@ -44,15 +59,19 @@ AppTesterClub reads the profile out of the IPA at upload and tells you first:
 | **Push notifications** | Optional. Fires the moment a build lands |
 | **Three platforms** | iOS, Android and macOS |
 
-## Getting started
+## Running it locally
 
 ```bash
 git clone https://github.com/aditya-28/apptesterclub.git
 cd apptesterclub
 npm install
-cp .env.example .env.local     # set ATC_PASSWORD and ATC_UPLOAD_TOKEN
+cp .env.example .env.local     # ATC_PASSWORD, ATC_UPLOAD_TOKEN, BLOB_READ_WRITE_TOKEN
 npm run dev
 ```
+
+Open it before configuring anything and it tells you what is missing rather than
+failing — but it needs a blob store to do anything useful, so `vercel env pull`
+from a deployed project is the quickest way to get one.
 
 Then point the CLI at it:
 

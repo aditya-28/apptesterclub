@@ -7,30 +7,26 @@ Status key: **done** · **blocking 1.0** · **after 1.0**
 
 ---
 
-## Blocking 1.0 — portability
-
-Nothing ships before these. Today the tool only runs where it was born.
-
-- [ ] **Storage adapters.** One interface, four backends: local filesystem,
-      S3-compatible (AWS, Cloudflare R2, MinIO, Backblaze), Vercel Blob, Azure.
-      Chosen by one environment variable. *Adapters must preserve write-once
-      records — see CONTRIBUTING.md for why that is not negotiable.*
-- [ ] **JavaScript binary parsing.** Reading an IPA currently shells out to
-      `unzip`, `plutil`, `sips` and `security`, so it is macOS-only and cannot
-      run on a Linux CI runner. Needs pure-JS handling of ZIP, binary plist,
-      CMS-signed provisioning profiles and Apple's CgBI PNG variant. **The
-      highest-value contribution available.**
-- [ ] **Configuration out of the code.** No deployment URL baked in anywhere.
-
 ## Blocking 1.0 — installability
 
-- [ ] **Docker image and compose file**, storage on local disk.
-- [ ] **One-click deploy** button for hosted platforms.
-- [ ] **First-run setup** that generates its own secrets rather than asking the
-      operator to invent them.
+**Vercel is the deployment target.** Not a temporary state: it provisions the
+blob store from the deploy button, terminates TLS (which iOS requires for
+over-the-air install), and its free tier covers a solo developer. Supporting
+every host would mean solving storage, TLS and deployment three times over for
+an audience that has not asked yet.
+
+- [x] **One-click deploy** button that also provisions storage.
+- [x] **Setup screen** instead of a crash when an instance is not finished
+      being configured. A fresh deployment with no storage used to throw a 500
+      from inside the Blob SDK, which tells the operator nothing.
+- [ ] **JavaScript binary parsing.** Reading an IPA shells out to `unzip`,
+      `plutil`, `sips` and `security`, so the CLI is macOS-only and cannot run
+      on a Linux CI runner. Needs pure-JS handling of ZIP, binary plist,
+      CMS-signed provisioning profiles and Apple's CgBI PNG variant. **The
+      highest-value contribution available.**
 - [ ] **`atc` published to npm**, configured per project or globally.
-- [ ] **Verified on a clean machine** from the written instructions alone. If a
-      stranger needs to ask a question, this is not done.
+- [ ] **Verified by a stranger** from the written instructions alone. If they
+      have to ask a question, this is not done.
 
 ## Blocking 1.0 — completeness
 
@@ -70,6 +66,10 @@ to trust.
 
 ## After 1.0
 
+- **Storage adapters** — local filesystem and S3-compatible, for operators who
+  will not use Vercel. Worth doing once someone asks; any adapter must preserve
+  write-once records, see CONTRIBUTING.md for why
+- **Docker image**, which only becomes meaningful alongside those adapters
 - Release channels — internal, beta and release as separate streams
 - Size change warnings — "40% larger than the last build" catches a bundled asset
 - Release notes drafted from commits since the previous build

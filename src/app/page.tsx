@@ -1,11 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isSignedIn } from "@/lib/auth";
-import { allBuilds, groupIntoApps, platformLabel } from "@/lib/catalog";
+import { allBuilds, groupIntoApps, platformLabel, storageReady } from "@/lib/catalog";
+import { Setup } from "./Setup";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  const missing = [
+    !process.env.ATC_PASSWORD && "ATC_PASSWORD",
+    !process.env.ATC_UPLOAD_TOKEN && "ATC_UPLOAD_TOKEN",
+    !storageReady() && "BLOB_READ_WRITE_TOKEN",
+  ].filter(Boolean) as string[];
+  // Checked before the sign-in redirect: without ATC_PASSWORD nobody can sign
+  // in at all, so redirecting to a login they cannot pass is a dead end.
+  if (missing.length) return <Setup missing={missing} />;
+
   if (!(await isSignedIn())) redirect("/login");
 
   const builds = await allBuilds();

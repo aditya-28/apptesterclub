@@ -57,6 +57,13 @@ export type App = {
 };
 
 const PREFIX = "meta/";
+
+/** Storage is the one thing that cannot be defaulted. Without it every page
+ *  that lists builds fails, so it is checked up front and reported as a setup
+ *  step rather than surfacing as a 500 from deep inside the SDK. */
+export function storageReady(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
 const recordPath = (token: string) => `${PREFIX}${token}.json`;
 
 export async function putBuild(build: Build): Promise<void> {

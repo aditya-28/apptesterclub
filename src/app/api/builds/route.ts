@@ -2,13 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { checkUploadToken } from "@/lib/auth";
 import { notify } from "@/lib/apns";
-import { putBuild, deleteBuild, allBuilds, groupIntoApps, type Build, type Platform } from "@/lib/catalog";
+import { putBuild, deleteBuild, allBuilds, groupIntoApps, storageReady, type Build, type Platform } from "@/lib/catalog";
 
 const PLATFORMS: Platform[] = ["ios", "android", "macos"];
 
 export async function POST(req: NextRequest) {
   if (!checkUploadToken(req.headers.get("authorization"))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!storageReady()) {
+    return NextResponse.json(
+      { error: "storage is not configured: BLOB_READ_WRITE_TOKEN is not set on this deployment" },
+      { status: 503 },
+    );
   }
 
   let body: Record<string, unknown>;
@@ -118,6 +124,12 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!checkUploadToken(req.headers.get("authorization"))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!storageReady()) {
+    return NextResponse.json(
+      { error: "storage is not configured: BLOB_READ_WRITE_TOKEN is not set on this deployment" },
+      { status: 503 },
+    );
   }
 
   const builds = await allBuilds();
