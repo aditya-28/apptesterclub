@@ -12,6 +12,17 @@ That is the whole command. Version, build number, bundle identifier, icon,
 minimum OS and the entire signing profile are read out of the binary. You get
 back an install link and a QR code.
 
+## See it working
+
+**[apptesterclub.vercel.app](https://apptesterclub.vercel.app)** — password `demo`
+
+A real instance with a real signed build in it. Open it on an iPhone and the
+install actually runs, though it will decline unless your device happens to be
+in that build's provisioning profile — which is the whole point, and the install
+page will tell you so plainly instead of failing in silence.
+
+Browsing only. Pushing needs the upload token, which is not published.
+
 ## Deploy your own
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Faditya-28%2Fapptesterclub&project-name=apptesterclub&repository-name=apptesterclub&env=ATC_PASSWORD%2CATC_UPLOAD_TOKEN&envDescription=A%20password%20for%20the%20web%20pages%2C%20and%20a%20token%20the%20CLI%20and%20phone%20app%20use.%20Generate%20the%20token%20with%3A%20openssl%20rand%20-hex%2024&envLink=https%3A%2F%2Fgithub.com%2Faditya-28%2Fapptesterclub%2Fblob%2Fmain%2F.env.example&demo-title=AppTesterClub&demo-description=Self-hosted%20build%20distribution.%20Push%20a%20build%2C%20install%20it%20on%20a%20device.&demo-url=https%3A%2F%2Fgithub.com%2Faditya-28%2Fapptesterclub&stores=%5B%7B%22type%22%3A%22blob%22%7D%5D)
