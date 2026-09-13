@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Push. Use "development" for builds you run from Xcode and "production" for
+    anything distributed. A mismatch here makes the device hand back a token
+    Apple then refuses to deliver to, silently.
+
+    Delete this key entirely if you are not using notifications.
+  -->
+  <key>aps-environment</key>
+  <string>development</string>
+</dict>
+</plist>

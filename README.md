@@ -69,6 +69,23 @@ atc push ./MyApp.ipa
 **TLS is not optional.** iOS refuses over-the-air install over plain HTTP, so any
 real deployment needs a valid certificate.
 
+## The iOS app
+
+A phone client lives in [`ios/`](ios/). One row per app, one button that already
+knows whether you need Install, Update or Open, full version history, and
+notifications when a build lands.
+
+**You build and sign it yourself** with your own Apple account — there is no App
+Store build to install. That is deliberate: it keeps every key, certificate and
+push credential yours, and means the client talks only to servers you pair it
+with. See [ios/README.md](ios/README.md).
+
+```bash
+cd ios && xcodegen generate && open AppTesterClub.xcodeproj
+```
+
+Pair it by opening `/pair` on your instance and scanning the code.
+
 ## How it is put together
 
 ```

@@ -45,37 +45,28 @@ Nothing ships before these. Today the tool only runs where it was born.
       storage and deployment recipes, API reference, and troubleshooting
       organised by symptom rather than by subsystem.
 
-## Blocking 1.0 — the iOS client
+## The iOS client — shipped
 
-A working version exists, embedded in the author's private app. Extracting it as
-a standalone client is the largest single piece of work in this release.
+Lives in [`ios/`](ios/). **Every operator builds and signs their own** with
+their own Apple account. There is no published App Store build.
 
-It ships **free on the App Store** and points at whichever instance you run —
-the way Home Assistant, Plex and Bitwarden clients work. One published app, any
-number of private servers, and nobody touches a signing certificate to use it.
+That is the better answer rather than a compromise, and it dissolves a problem
+that otherwise has no clean solution. Apple addresses push by *app*, and the key
+belongs to whoever publishes it — so a self-hosted instance could never push to
+a client someone else published. Every self-hosted project with a mobile client
+hits that wall and ends up running a relay. Here the operator owns the app, the
+key and the server, so push works directly and no central infrastructure exists
+to trust.
 
-- [x] Install / Update / Open, where the button reflects what is on the phone
+- [x] Install / Update / Open, the button reflecting what is on the phone
 - [x] Full version history, any version reinstallable
-- [ ] **Pair by scanning a QR**, so no one types a token on a phone keyboard
-- [ ] **Several servers at once** — yours and a client's, side by side
-- [ ] **Per-app notification switches**, so twenty apps do not all buzz you
+- [x] Several servers at once — yours and a client's, side by side
+- [x] Pair by scanning the QR on the instance's `/pair` page
+- [x] Push registration against every paired server
+- [x] Expiry warnings before you tap a build iOS would refuse
+- [ ] **Per-app notification switches** — currently all or nothing per server
+- [ ] **Tokens in the keychain** rather than UserDefaults
 - [ ] **Readable offline**, refreshing behind you
-- [ ] **Eligibility shown before the tap**, greyed out with the reason
-
-### The notification problem, stated plainly
-
-Apple addresses push by *app*, not by server, and the key belongs to whoever
-publishes the app. A self-hosted instance cannot push to an App Store client it
-did not publish. Every self-hosted project with a mobile client hits this.
-
-| Approach | Cost | Call |
-|---|---|---|
-| **Relay** — the project runs a forwarder that instances ping | Central infrastructure, though it carries only an app name, version and build reference. Never a binary, never your credentials | Default, **opt-in** |
-| **Bring your own key** — operator supplies an Apple push key and builds their own client | Needs an Apple developer account | Supported |
-| **Background polling** | Unreliable; iOS throttles it hard | Fallback only |
-
-The app works fully without the relay. An operator who wants nothing leaving
-their network turns it off and keeps everything else.
 
 ## After 1.0
 

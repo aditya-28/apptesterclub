@@ -1,0 +1,140 @@
+import Foundation
+
+/// Reads the build catalogue from one instance. This client never writes a
+/// build — those arrive through the `atc` command on the machine that compiled
+/// them, which is the only place the signing material exists.
+
+struct Build: Codable, Sendable, Identifiable, Hashable {
+    let shareToken: String
+    let version: String
+    let buildNumber: String
+    let fileName: String
+    let fileSize: Int64
+    let notes: String?
+    let gitSha: String?
+    let branch: String?
+    let minOs: String?
+    let urlScheme: String?
+    let iconUrl: URL?
+    let profileType: String?
+    let profileExpiresAt: Date?
+    let deviceCount: Int?
+    let createdAt: Date
+    let installURL: URL
+    /// A ready-made `itms-services://` URL on iOS, the binary itself elsewhere.
+    /// The server forms it so every client agrees on the OTA rules.
+    let installDirectURL: URL
+
+    var id: String { shareToken }
+
+    var shortSize: String {
+        let mb = Double(fileSize) / 1_048_576
+        return mb < 1 ? "\(fileSize / 1024) KB" : String(format: "%.1f MB", mb)
+    }
+
+    var expiresInDays: Int? {
+        guard let expiry = profileExpiresAt else { return nil }
+        return Calendar.current.dateComponents([.day], from: Date(), to: expiry).day
+    }
+
+    var isExpired: Bool { (expiresInDays ?? 1) < 0 }
+}
+
+struct CatalogApp: Codable, Sendable, Identifiable, Hashable {
+    let slug: String
+    let name: String
+    let platform: String
+    let bundleId: String?
+    let iconUrl: URL?
+    let builds: [Build]
+
+    var id: String { slug }
+    var latest: Build? { builds.first }
+
+    var platformLabel: String {
+        switch platform {
+        case "ios": "iOS"
+        case "macos": "macOS"
+        case "android": "Android"
+        default: platform.capitalized
+        }
+    }
+
+    var symbolName: String {
+        switch platform {
+        case "ios": "iphone"
+        case "macos": "laptopcomputer"
+        case "android": "candybarphone"
+        default: "app.dashed"
+        }
+    }
+}
+
+enum APIError: LocalizedError {
+    case noServer
+    case unauthorized
+    case status(Int)
+    case offline
+
+    var errorDescription: String? {
+        switch self {
+        case .noServer: "No server yet. Add one in Settings."
+        case .unauthorized: "That server rejected the token. Check it in Settings."
+        case .status(let code): "The server returned \(code)."
+        case .offline: "Could not reach the server."
+        }
+    }
+}
+
+struct API: Sendable {
+    let server: Server
+    var session: URLSession = .shared
+
+    private static let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }()
+
+    private struct Catalog: Decodable { let apps: [CatalogApp] }
+
+    func apps() async throws -> [CatalogApp] {
+        let data = try await get("api/builds")
+        return try Self.decoder.decode(Catalog.self, from: data).apps
+    }
+
+    /// Registers this device for push. Harmless if the instance has no APNs key
+    /// configured — it simply records the token and never sends anything.
+    func register(deviceToken: String, sandbox: Bool) async {
+        var request = signed("api/devices")
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode([
+            "token": deviceToken,
+            "platform": "ios",
+            "environment": sandbox ? "sandbox" : "production",
+        ])
+        _ = try? await session.data(for: request)
+    }
+
+    private func signed(_ path: String) -> URLRequest {
+        var request = URLRequest(url: server.url.appending(path: path))
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        return request
+    }
+
+    private func get(_ path: String) async throws -> Data {
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: signed(path))
+        } catch {
+            throw APIError.offline
+        }
+        guard let http = response as? HTTPURLResponse else { throw APIError.offline }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.status(http.statusCode) }
+        return data
+    }
+}
