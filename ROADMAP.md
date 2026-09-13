@@ -27,6 +27,13 @@ an audience that has not asked yet.
 - [ ] **`atc` published to npm**, configured per project or globally.
 - [ ] **Verified by a stranger** from the written instructions alone. If they
       have to ask a question, this is not done.
+- [ ] **Disable deployment protection automatically.** New Vercel projects
+      enable it, and it blocks Apple's install daemon, so every operator has to
+      find and switch it off. Documented for now; a build-time check that warns
+      on the setup screen would be better.
+- [ ] **Hand the blob token to the CLI without a manual step.** Right now the
+      operator runs `vercel env pull` and copies a value, which is the least
+      obvious part of setup.
 
 ## Blocking 1.0 — completeness
 

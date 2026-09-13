@@ -24,6 +24,35 @@ blob store for you**, and asks for two values:
 | `ATC_PASSWORD` | Password for the web pages. Pick anything. |
 | `ATC_UPLOAD_TOKEN` | What the CLI and phone app authenticate with. Generate one: `openssl rand -hex 24` |
 
+### Two things to do straight after
+
+**1. Turn off Vercel's deployment protection.** New projects get it enabled, and
+it blocks Apple's install daemon — which cannot log in to anything. Installs
+then fail with no error the user can see, which is the single most confusing way
+this can break. Project → Settings → **Deployment Protection** → set Vercel
+Authentication to Disabled.
+
+Your instance is still protected: the web pages need `ATC_PASSWORD`, the API
+needs `ATC_UPLOAD_TOKEN`, and install links carry a 128-bit unguessable token.
+
+**2. Get the blob token for the CLI.** The command line uploads binaries
+straight to storage, so it needs the same token the deployment has:
+
+```bash
+npx vercel env pull .env.production --environment=production
+grep BLOB_READ_WRITE_TOKEN .env.production
+```
+
+Put that, the instance URL and your upload token into `~/.atc.json`:
+
+```json
+{
+  "url": "https://your-instance.vercel.app",
+  "uploadToken": "...",
+  "blobToken": "vercel_blob_rw_..."
+}
+```
+
 That is the whole setup. The free tier is enough for one developer, and TLS —
 which iOS requires for over-the-air install — comes with it.
 
@@ -77,16 +106,12 @@ Then point the CLI at it:
 
 ```bash
 npm link                       # puts `atc` on your PATH
-cat > ~/.atc.json <<'JSON'
-{ "url": "https://your-instance.example.com",
-  "uploadToken": "...",
-  "blobToken": "..." }
-JSON
 atc push ./MyApp.ipa
 ```
 
 **TLS is not optional.** iOS refuses over-the-air install over plain HTTP, so any
-real deployment needs a valid certificate.
+real deployment needs a valid certificate. That rules out pushing to a localhost
+instance and installing from a phone — deploy first.
 
 ## The iOS app
 
