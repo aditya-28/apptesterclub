@@ -89,6 +89,16 @@ or not, nothing more. So the app remembers what it installed. A build that
 arrived another way — Xcode, a Safari link — is invisible to that record and
 shows Update rather than Open, which is the harmless direction to be wrong in.
 
+## Releasing a new version
+
+Bump `CFBundleShortVersionString` and `CFBundleVersion` in `project.yml`, then
+push without version flags — `atc` reads both out of the binary, so the number
+in the catalogue is always the number that actually shipped:
+
+```bash
+xcodegen generate && xcodebuild ... && atc push ./AppTesterClub.ipa --app apptesterclub
+```
+
 ## Known gaps
 
 - Server tokens are in `UserDefaults`, not the keychain. On the roadmap.
