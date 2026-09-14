@@ -75,9 +75,16 @@ final class Installer {
 
     private(set) var phase: Phase = .idle
 
-    private let key: String
+    let key: String
     private let urlScheme: String?
     private var poller: Task<Void, Never>?
+
+    /// How long the hand-off message stays up no matter what.
+    ///
+    /// The moment iOS accepts an install the person leaves for the Home Screen,
+    /// and resolving instantly means they come back to a button that looks like
+    /// nothing happened. Holding it puts the answer where they will look.
+    private let dwell: Duration = .seconds(12)
 
     /// Not cancelled in `deinit`: that is a nonisolated context and cannot
     /// touch main-actor state. The loop holds a weak reference and falls out on
@@ -111,6 +118,18 @@ final class Installer {
         // No record. The scheme can still prove it is present — from a previous
         // install, or one done outside this app.
         return isInstalled ? .update : .install
+    }
+
+    /// Whether a build is the one this phone has.
+    func isOnThisPhone(_ build: Build) -> Bool {
+        InstalledRegistry.token(forApp: key) == build.shareToken
+    }
+
+    /// True while iOS is being handed the install, so callers can disable their
+    /// own buttons rather than each inventing the rule.
+    var isBusy: Bool {
+        if case .working = phase { return true }
+        return false
     }
 
     /// Whether this app has an update waiting, for the attention dot.
@@ -153,26 +172,40 @@ final class Installer {
     private func start(build: Build) {
         let wasInstalled = isInstalled || InstalledRegistry.token(forApp: key) != nil
         phase = .working(wasInstalled ? .update : .install)
+        let began = ContinuousClock.now
 
         UIApplication.shared.open(build.installDirectURL, options: [:]) { [weak self] _ in
             // The boolean lies for itms-services, so decide from whether there
             // is anything to probe rather than from the result.
             guard let self else { return }
             guard self.urlScheme != nil else {
-                // Nothing to probe. Record it anyway rather than leaving the
-                // row saying "Install" forever after a successful install —
-                // that was the old behaviour and it made the button useless for
-                // every build without a URL scheme. If the person cancelled
-                // iOS's prompt this guesses wrong, and Reinstall is one tap.
+                // Nothing to probe. Record it rather than leaving the row saying
+                // "Install" forever after a successful install, but hold the
+                // message for the dwell so it does not resolve before the person
+                // has even looked at their Home Screen.
                 InstalledRegistry.record(build.shareToken, forApp: self.key)
-                self.phase = .done
+                self.settle(after: began)
                 return
             }
-            self.watch(startedInstalled: wasInstalled, token: build.shareToken)
+            self.watch(startedInstalled: wasInstalled, token: build.shareToken, began: began)
         }
     }
 
-    private func watch(startedInstalled: Bool, token: String) {
+    /// Leaves the hand-off message up for the rest of the dwell, then resolves.
+    private func settle(after began: ContinuousClock.Instant) {
+        poller?.cancel()
+        poller = Task { [weak self] in
+            guard let self else { return }
+            let elapsed = ContinuousClock.now - began
+            if elapsed < self.dwell {
+                try? await Task.sleep(for: self.dwell - elapsed)
+            }
+            guard !Task.isCancelled else { return }
+            self.phase = .done
+        }
+    }
+
+    private func watch(startedInstalled: Bool, token: String, began: ContinuousClock.Instant) {
         poller?.cancel()
         // An update shows only a brief dip, so sample it more often than a
         // fresh install, which just has to appear once.
@@ -187,16 +220,16 @@ final class Installer {
 
                 if startedInstalled {
                     if !now { sawItGo = true }
-                    if sawItGo && now { return self.finish(token) }
+                    if sawItGo && now { return self.finish(token, began: began) }
                 } else if now {
-                    return self.finish(token)
+                    return self.finish(token, began: began)
                 }
 
                 if ContinuousClock.now - began > .seconds(120) {
                     // Out of patience. For an update the dip is short and easy
                     // to miss, so take the likely outcome — the row still
                     // offers Reinstall if this guessed wrong.
-                    if startedInstalled && self.isInstalled { self.finish(token) }
+                    if startedInstalled && self.isInstalled { self.finish(token, began: began) }
                     else { self.phase = .unconfirmed }
                     return
                 }
@@ -204,8 +237,8 @@ final class Installer {
         }
     }
 
-    private func finish(_ token: String) {
+    private func finish(_ token: String, began: ContinuousClock.Instant) {
         InstalledRegistry.record(token, forApp: key)
-        phase = .done
+        settle(after: began)
     }
 }

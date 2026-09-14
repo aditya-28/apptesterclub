@@ -52,6 +52,21 @@ struct BuildsScreen: View {
                     .plainRow()
             }
 
+            if let checked = catalog.lastChecked {
+                // Wrapped in a timeline so "2 minutes ago" keeps counting while
+                // the app sits open, rather than freezing on whatever it said
+                // when the view was last built.
+                TimelineView(.periodic(from: .now, by: 30)) { _ in
+                    Text("Last checked \(checked.ago)")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(Palette.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 6, trailing: 16))
+            }
+
             let arranged = prefs.arrange(catalog.apps)
 
             if !arranged.pinned.isEmpty {
@@ -84,9 +99,12 @@ struct BuildsScreen: View {
 
             let archived = prefs.archivedApps(catalog.apps)
             if !archived.isEmpty {
-                NavigationLink {
-                    ArchiveScreen(apps: archived, prefs: prefs, installerFor: installer(for:))
-                } label: {
+                ZStack {
+                    NavigationLink {
+                        ArchiveScreen(allApps: catalog.apps, prefs: prefs, installerFor: installer(for:))
+                    } label: { EmptyView() }
+                        .opacity(0)
+
                     HStack(spacing: Metric.sm) {
                         Image(systemName: "archivebox")
                         Text("Archived")
@@ -100,18 +118,9 @@ struct BuildsScreen: View {
                     .padding(Metric.md)
                     .card()
                 }
-                .buttonStyle(.plain)
                 .plainRow()
             }
 
-            if let checked = catalog.lastChecked, !catalog.apps.isEmpty {
-                Text("Checked \(checked.formatted(.relative(presentation: .named)))")
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(Palette.textTertiary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, Metric.sm)
-                    .plainRow()
-            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -322,7 +331,15 @@ struct AppRow: View {
                     }
                 }
 
-                if let latest = app.latest {
+                if installer.isBusy {
+                    // The person is about to leave for the Home Screen, so say
+                    // where the result will be rather than just spinning.
+                    Text("Sent to iOS — check your Home Screen")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Palette.accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                } else if let latest = app.latest {
                     Text("\(latest.version) (\(latest.buildNumber)) · \(latest.relativeAge)")
                         .font(.system(size: 12, design: .rounded))
                         .foregroundStyle(needsAttention ? Palette.danger : Palette.textSecondary)
@@ -358,14 +375,10 @@ struct AppRow: View {
     @ViewBuilder
     private var trailing: some View {
         switch installer.phase {
-        case .working(let action):
-            VStack(spacing: 4) {
-                ProgressView().controlSize(.small)
-                Text(action == .update ? "Updating" : "Installing")
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(Palette.textTertiary)
-            }
-            .frame(width: 74)
+        case .working:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 74)
 
         case .unconfirmed:
             Button("Check") { installer.reset() }.buttonStyle(QuietButton())

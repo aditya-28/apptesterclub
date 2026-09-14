@@ -52,7 +52,7 @@ struct HistoryScreen: View {
                         app: app,
                         build: build,
                         isLatest: index == 0,
-                        isOnThisPhone: InstalledRegistry.token(forApp: installerKey) == build.shareToken,
+                        isOnThisPhone: installer.isOnThisPhone(build),
                         note: localNotes[build.shareToken] ?? build.userNote,
                         installer: installer,
                         onEditNote: { editingNote = build })
@@ -82,7 +82,6 @@ struct HistoryScreen: View {
         }
     }
 
-    private var installerKey: String { app.slug }
 }
 
 private struct BuildRow: View {
@@ -161,16 +160,28 @@ private struct BuildRow: View {
                 Button {
                     installer.perform(isOnThisPhone ? .update : .install, build: build)
                 } label: {
-                    Label(isOnThisPhone ? "Reinstall this version" : "Install this version",
-                          systemImage: "arrow.down.circle.fill")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Palette.accent.opacity(isOnThisPhone ? 0.12 : 1),
-                                    in: .rect(cornerRadius: 10))
-                        .foregroundStyle(isOnThisPhone ? Palette.accent : Palette.onAccent)
+                    Group {
+                        if installer.isBusy {
+                            // Once iOS has it, this button has nothing left to
+                            // do, and leaving it live invites a second tap that
+                            // only restarts the same install.
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("Sent to iOS — check your Home Screen")
+                            }
+                        } else {
+                            Label(isOnThisPhone ? "Reinstall this version" : "Install this version",
+                                  systemImage: "arrow.down.circle.fill")
+                        }
+                    }
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(quiet ? Palette.surface2 : Palette.accent, in: .rect(cornerRadius: 10))
+                    .foregroundStyle(quiet ? Palette.textSecondary : Palette.onAccent)
                 }
                 .buttonStyle(.plain)
+                .disabled(installer.isBusy)
             }
 
             HStack(spacing: Metric.sm) {
@@ -186,6 +197,9 @@ private struct BuildRow: View {
         .card()
         .plainRow()
     }
+
+    /// Busy or already-installed both mean "do not shout at me".
+    private var quiet: Bool { installer.isBusy || isOnThisPhone }
 
     private var subtitle: String {
         var parts = [build.shortSize]

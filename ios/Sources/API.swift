@@ -4,6 +4,19 @@ import Foundation
 /// build — those arrive through the `atc` command on the machine that compiled
 /// them, which is the only place the signing material exists.
 
+extension Date {
+    /// "just now", then "2 minutes ago", "1 hour ago", "3 days ago".
+    ///
+    /// The system's relative format produces "in 0 seconds" for anything within
+    /// a second or so of the present, which is both wrong in tense and useless
+    /// to read, so the first minute is handled here instead.
+    var ago: String {
+        let seconds = Date().timeIntervalSince(self)
+        if seconds < 60 { return "just now" }
+        return formatted(.relative(presentation: .numeric))
+    }
+}
+
 struct Build: Codable, Sendable, Identifiable, Hashable {
     let shareToken: String
     let version: String
@@ -44,9 +57,9 @@ struct Build: Codable, Sendable, Identifiable, Hashable {
 
     /// "2 minutes ago" reads faster than a timestamp when the question is
     /// really "is this fresh?".
-    var relativeAge: String {
-        createdAt.formatted(.relative(presentation: .named))
-    }
+    /// Numeric rather than named: "1 day ago" is what you want to read here,
+    /// where named would say "yesterday" and lose the scale at a glance.
+    var relativeAge: String { createdAt.ago }
 }
 
 struct CatalogApp: Codable, Sendable, Identifiable, Hashable {
