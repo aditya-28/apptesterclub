@@ -10,6 +10,7 @@ import SwiftUI
 @Observable
 final class Preferences {
     private(set) var pinned: Set<String> = []
+    private(set) var archived: Set<String> = []
     private(set) var order: [String] = []
 
     private let serverKey: String
@@ -17,22 +18,47 @@ final class Preferences {
     init(serverKey: String) {
         self.serverKey = serverKey
         pinned = Set(UserDefaults.standard.stringArray(forKey: key("pinned")) ?? [])
+        archived = Set(UserDefaults.standard.stringArray(forKey: key("archived")) ?? [])
         order = UserDefaults.standard.stringArray(forKey: key("order")) ?? []
     }
 
     private func key(_ name: String) -> String { "club.apptester.\(name).\(serverKey)" }
 
     func isPinned(_ slug: String) -> Bool { pinned.contains(slug) }
+    func isArchived(_ slug: String) -> Bool { archived.contains(slug) }
 
     func togglePin(_ slug: String) {
-        if pinned.contains(slug) { pinned.remove(slug) } else { pinned.insert(slug) }
-        UserDefaults.standard.set(Array(pinned), forKey: key("pinned"))
+        if pinned.contains(slug) {
+            pinned.remove(slug)
+        } else {
+            pinned.insert(slug)
+            // Pinned and archived are opposite intentions, so one clears the other.
+            archived.remove(slug)
+            save("archived", archived)
+        }
+        save("pinned", pinned)
+    }
+
+    func toggleArchive(_ slug: String) {
+        if archived.contains(slug) {
+            archived.remove(slug)
+        } else {
+            archived.insert(slug)
+            pinned.remove(slug)
+            save("pinned", pinned)
+        }
+        save("archived", archived)
+    }
+
+    private func save(_ name: String, _ value: Set<String>) {
+        UserDefaults.standard.set(Array(value), forKey: key(name))
     }
 
     /// Apps split into the two sections the list renders, each in the person's
     /// own order. Anything never seen before sorts to the end of its section by
     /// name, so a newly pushed app appears without disturbing what you arranged.
     func arrange(_ apps: [CatalogApp]) -> (pinned: [CatalogApp], rest: [CatalogApp]) {
+        let visible = apps.filter { !archived.contains($0.slug) }
         let rank = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
         func sort(_ list: [CatalogApp]) -> [CatalogApp] {
             list.sorted { a, b in
@@ -44,8 +70,15 @@ final class Preferences {
                 }
             }
         }
-        return (sort(apps.filter { pinned.contains($0.slug) }),
-                sort(apps.filter { !pinned.contains($0.slug) }))
+        return (sort(visible.filter { pinned.contains($0.slug) }),
+                sort(visible.filter { !pinned.contains($0.slug) }))
+    }
+
+    /// Archived apps, for the screen that exists so they are out of the way
+    /// rather than gone. Nothing is deleted; the builds are still on the server.
+    func archivedApps(_ apps: [CatalogApp]) -> [CatalogApp] {
+        apps.filter { archived.contains($0.slug) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     /// Records a new arrangement. Both sections are written into one list, so

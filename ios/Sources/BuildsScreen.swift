@@ -82,6 +82,28 @@ struct BuildsScreen: View {
                     .plainRow()
             }
 
+            let archived = prefs.archivedApps(catalog.apps)
+            if !archived.isEmpty {
+                NavigationLink {
+                    ArchiveScreen(apps: archived, prefs: prefs, installerFor: installer(for:))
+                } label: {
+                    HStack(spacing: Metric.sm) {
+                        Image(systemName: "archivebox")
+                        Text("Archived")
+                        Spacer()
+                        Text("\(archived.count)")
+                            .monospacedDigit()
+                            .foregroundStyle(Palette.textTertiary)
+                    }
+                    .font(.system(size: 14, design: .rounded))
+                    .foregroundStyle(Palette.textSecondary)
+                    .padding(Metric.md)
+                    .card()
+                }
+                .buttonStyle(.plain)
+                .plainRow()
+            }
+
             if let checked = catalog.lastChecked, !catalog.apps.isEmpty {
                 Text("Checked \(checked.formatted(.relative(presentation: .named)))")
                     .font(.system(size: 11, design: .rounded))
@@ -100,10 +122,14 @@ struct BuildsScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if !catalog.apps.isEmpty {
-                    Button(isEditing ? "Done" : "Arrange") {
+                    Button {
                         withAnimation { isEditing.toggle() }
+                    } label: {
+                        Image(systemName: isEditing
+                              ? "checkmark"
+                              : "arrow.up.arrow.down")
                     }
-                    .font(.system(size: 15, design: .rounded))
+                    .accessibilityLabel(isEditing ? "Done arranging" : "Arrange apps")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -144,7 +170,9 @@ struct BuildsScreen: View {
             app: app,
             installer: installer(for: app),
             isPinned: prefs.isPinned(app.slug),
-            onTogglePin: { withAnimation { prefs.togglePin(app.slug) } })
+            isArchived: false,
+            onTogglePin: { withAnimation { prefs.togglePin(app.slug) } },
+            onToggleArchive: { withAnimation { prefs.toggleArchive(app.slug) } })
     }
 
     /// One installer per app, kept here rather than in the row so its state
@@ -204,11 +232,13 @@ struct AppIcon: View {
 
 /// One row per app. Standing at your desk the question is "is my phone
 /// current?", not "what were the last nine builds" — that is behind the row.
-private struct AppRow: View {
+struct AppRow: View {
     let app: CatalogApp
     let installer: Installer
     let isPinned: Bool
+    let isArchived: Bool
     let onTogglePin: () -> Void
+    let onToggleArchive: () -> Void
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
@@ -230,14 +260,29 @@ private struct AppRow: View {
             if phase == .active { installer.refresh(for: app) }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button(action: onTogglePin) {
-                Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin")
+            if !isArchived {
+                Button(action: onTogglePin) {
+                    Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin")
+                }
+                .tint(Palette.accent)
             }
-            .tint(Palette.accent)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(action: onToggleArchive) {
+                Label(isArchived ? "Restore" : "Archive",
+                      systemImage: isArchived ? "tray.and.arrow.up" : "archivebox")
+            }
+            .tint(isArchived ? Palette.success : Palette.textTertiary)
         }
         .contextMenu {
-            Button(action: onTogglePin) {
-                Label(isPinned ? "Unpin" : "Pin to top", systemImage: isPinned ? "pin.slash" : "pin")
+            if !isArchived {
+                Button(action: onTogglePin) {
+                    Label(isPinned ? "Unpin" : "Pin to top", systemImage: isPinned ? "pin.slash" : "pin")
+                }
+            }
+            Button(action: onToggleArchive) {
+                Label(isArchived ? "Move back" : "Archive",
+                      systemImage: isArchived ? "tray.and.arrow.up" : "archivebox")
             }
             if let latest = app.latest {
                 Button {
