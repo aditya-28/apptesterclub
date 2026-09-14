@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { checkUploadToken } from "@/lib/auth";
 import { notify } from "@/lib/apns";
+import { readNote } from "./[token]/note/route";
 import { putBuild, deleteBuild, allBuilds, groupIntoApps, storageReady, type Build, type Platform } from "@/lib/catalog";
 
 const PLATFORMS: Platform[] = ["ios", "android", "macos"];
@@ -139,13 +140,13 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(
     {
-      apps: apps.map((a) => ({
+      apps: await Promise.all(apps.map(async (a) => ({
         slug: a.slug,
         name: a.name,
         platform: a.platform,
         bundleId: a.bundleId ?? null,
         iconUrl: a.builds.find((b) => b.iconUrl)?.iconUrl ?? null,
-        builds: a.builds.map((b) => ({
+        builds: await Promise.all(a.builds.map(async (b) => ({
           shareToken: b.shareToken,
           version: b.version,
           buildNumber: b.buildNumber,
@@ -157,6 +158,7 @@ export async function GET(req: NextRequest) {
           minOs: b.minOs ?? null,
           urlScheme: b.urlScheme ?? null,
           iconUrl: b.iconUrl ?? null,
+          userNote: await readNote(b.shareToken),
           profileType: b.profileType ?? null,
           profileExpiresAt: b.profileExpiresAt ?? null,
           deviceCount: b.provisionedUDIDs?.length ?? 0,
@@ -170,8 +172,8 @@ export async function GET(req: NextRequest) {
                   `${origin}/api/manifest/${b.shareToken}`,
                 )}`
               : b.fileUrl,
-        })),
-      })),
+        }))),
+      }))),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

@@ -11,6 +11,7 @@ struct AppTesterClubApp: App {
     var body: some Scene {
         WindowGroup {
             Root(store: store)
+                .environment(store)
                 .fontDesign(.rounded)
                 .tint(Palette.accent)
                 .task {

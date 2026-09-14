@@ -14,6 +14,9 @@ struct Build: Codable, Sendable, Identifiable, Hashable {
     let gitSha: String?
     let branch: String?
     let minOs: String?
+    /// A note a person added after the build was pushed, as opposed to `notes`,
+    /// which is the release note supplied at upload.
+    let userNote: String?
     let urlScheme: String?
     let iconUrl: URL?
     let profileType: String?
@@ -38,6 +41,12 @@ struct Build: Codable, Sendable, Identifiable, Hashable {
     }
 
     var isExpired: Bool { (expiresInDays ?? 1) < 0 }
+
+    /// "2 minutes ago" reads faster than a timestamp when the question is
+    /// really "is this fresh?".
+    var relativeAge: String {
+        createdAt.formatted(.relative(presentation: .named))
+    }
 }
 
 struct CatalogApp: Codable, Sendable, Identifiable, Hashable {
@@ -101,6 +110,20 @@ struct API: Sendable {
     func apps() async throws -> [CatalogApp] {
         let data = try await get("api/builds")
         return try Self.decoder.decode(Catalog.self, from: data).apps
+    }
+
+    /// Adds or replaces the note on a build. The server appends rather than
+    /// rewrites, so the change is readable immediately.
+    func saveNote(_ text: String, on build: Build) async throws {
+        var request = signed("api/builds/\(build.shareToken)/note")
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["text": text])
+
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.offline }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.status(http.statusCode) }
     }
 
     /// Registers this device for push. Harmless if the instance has no APNs key

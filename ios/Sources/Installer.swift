@@ -26,15 +26,22 @@ enum InstalledRegistry {
 
 enum AppAction: Equatable {
     case install, update, open, viewOnly
+    /// On this phone, but not launchable: the build declares no URL scheme, and
+    /// iOS gives no other way to open another app. Saying "Open" here would be
+    /// a button that does nothing.
+    case installed
 
     var title: String {
         switch self {
         case .install: "Install"
         case .update: "Update"
         case .open: "Open"
+        case .installed: "Installed"
         case .viewOnly: "View"
         }
     }
+
+    var isQuiet: Bool { self == .open || self == .installed || self == .viewOnly }
 }
 
 /// Drives one app from Install or Update through to Open.
@@ -85,20 +92,43 @@ final class Installer {
         return UIApplication.shared.canOpenURL(url)
     }
 
+    /// What the button should say.
+    ///
+    /// Our own record comes first and `canOpenURL` second. That order matters:
+    /// `canOpenURL` only answers for apps whose URL scheme is listed in
+    /// `LSApplicationQueriesSchemes`, and most builds declare no scheme at all.
+    /// Asking it first meant every one of those read "Install" forever, even
+    /// straight after installing them. If we put a build on this phone, we know
+    /// it is there.
     func action(for app: CatalogApp) -> AppAction {
         guard app.platform == "ios" else { return .viewOnly }
-        guard isInstalled else { return .install }
-        guard let latest = app.latest else { return .open }
-        return InstalledRegistry.token(forApp: key) == latest.shareToken ? .open : .update
+        guard let latest = app.latest else { return .install }
+
+        if let installed = InstalledRegistry.token(forApp: key) {
+            if installed != latest.shareToken { return .update }
+            return canOpenApp ? .open : .installed
+        }
+        // No record. The scheme can still prove it is present — from a previous
+        // install, or one done outside this app.
+        return isInstalled ? .update : .install
+    }
+
+    /// Whether this app has an update waiting, for the attention dot.
+    func needsUpdate(for app: CatalogApp) -> Bool {
+        action(for: app) == .update
     }
 
     func perform(_ action: AppAction, build: Build) {
         switch action {
         case .open: openApp()
-        case .viewOnly: break
+        case .installed, .viewOnly: break
         case .install, .update: start(build: build)
         }
     }
+
+    /// Only possible when the build declares a URL scheme. Without one there is
+    /// no way to launch another app, so the caller offers this conditionally.
+    var canOpenApp: Bool { urlScheme != nil }
 
     func openApp() {
         guard let scheme = urlScheme, let url = URL(string: "\(scheme)://") else { return }
@@ -121,7 +151,7 @@ final class Installer {
     }
 
     private func start(build: Build) {
-        let wasInstalled = isInstalled
+        let wasInstalled = isInstalled || InstalledRegistry.token(forApp: key) != nil
         phase = .working(wasInstalled ? .update : .install)
 
         UIApplication.shared.open(build.installDirectURL, options: [:]) { [weak self] _ in
@@ -129,7 +159,13 @@ final class Installer {
             // is anything to probe rather than from the result.
             guard let self else { return }
             guard self.urlScheme != nil else {
-                self.phase = .unconfirmed
+                // Nothing to probe. Record it anyway rather than leaving the
+                // row saying "Install" forever after a successful install —
+                // that was the old behaviour and it made the button useless for
+                // every build without a URL scheme. If the person cancelled
+                // iOS's prompt this guesses wrong, and Reinstall is one tap.
+                InstalledRegistry.record(build.shareToken, forApp: self.key)
+                self.phase = .done
                 return
             }
             self.watch(startedInstalled: wasInstalled, token: build.shareToken)
