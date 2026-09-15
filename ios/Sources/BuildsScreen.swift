@@ -126,9 +126,11 @@ struct BuildsScreen: View {
         .scrollContentBackground(.hidden)
         .background { Palette.base.ignoresSafeArea() }
         .environment(\.editMode, .constant(isEditing ? .active : .inactive))
-        .navigationTitle(store.selected?.displayName ?? "Builds")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                ServerPicker(store: store)
+            }
             ToolbarItem(placement: .topBarLeading) {
                 if !catalog.apps.isEmpty {
                     Button {

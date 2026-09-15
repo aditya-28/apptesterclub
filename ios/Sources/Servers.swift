@@ -12,11 +12,15 @@ struct Server: Codable, Identifiable, Hashable, Sendable {
     var url: URL
     var token: String
 
-    /// What to show when the operator has not named it — the host is more
+    /// The nickname if one was given, otherwise the host — which is still more
     /// recognisable than a URL with a scheme and path attached.
     var displayName: String {
         name.isEmpty ? (url.host() ?? url.absoluteString) : name
     }
+
+    /// Shown under the nickname so two instances on similar hosts stay
+    /// distinguishable once they have been renamed to something friendly.
+    var subtitle: String { url.host() ?? url.absoluteString }
 }
 
 /// Servers live in UserDefaults rather than the keychain for now.
@@ -64,12 +68,24 @@ final class ServerStore {
     func add(_ server: Server) {
         // Re-pairing the same instance should replace it, not stack duplicates.
         if let i = servers.firstIndex(where: { $0.url == server.url }) {
-            servers[i] = server
-            selectedID = server.id
+            var replacement = server
+            // Keep a nickname the person chose. Re-pairing to refresh a token
+            // should not silently rename their server back to its hostname.
+            if !servers[i].name.isEmpty { replacement.name = servers[i].name }
+            replacement.id = servers[i].id
+            servers[i] = replacement
+            selectedID = replacement.id
         } else {
             servers.append(server)
             selectedID = server.id
         }
+        save()
+    }
+
+    /// An empty name falls back to the host rather than leaving a blank title.
+    func rename(_ server: Server, to name: String) {
+        guard let i = servers.firstIndex(where: { $0.id == server.id }) else { return }
+        servers[i].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         save()
     }
 

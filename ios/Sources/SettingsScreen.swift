@@ -6,6 +6,8 @@ struct SettingsScreen: View {
     @State private var isScanning = false
     @State private var manualURL = ""
     @State private var manualToken = ""
+    @State private var manualName = ""
+    @State private var renaming: Server?
     @State private var scanFailure: String?
 
     var body: some View {
@@ -37,11 +39,24 @@ struct SettingsScreen: View {
                                         .foregroundStyle(Palette.accent)
                                 }
                             }
+                            .contentShape(.rect)
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button { renaming = server } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            .tint(Palette.accent)
+                        }
+                        .contextMenu {
+                            Button { renaming = server } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
                         }
                     }
                     .onDelete { offsets in
                         offsets.map { store.servers[$0] }.forEach(store.remove)
                     }
+                    .onMove { _, _ in }
                 }
             } header: {
                 Text("Servers")
@@ -69,6 +84,9 @@ struct SettingsScreen: View {
             }
 
             Section("Or enter it by hand") {
+                TextField("Name (optional)", text: $manualName)
+                    .autocorrectionDisabled()
+
                 TextField("https://builds.example.com", text: $manualURL)
                     .textContentType(.URL)
                     .keyboardType(.URL)
@@ -96,6 +114,9 @@ struct SettingsScreen: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $renaming) { server in
+            RenameServerSheet(store: store, server: server)
+        }
         .sheet(isPresented: $isScanning) {
             QRScanner { url in
                 isScanning = false
@@ -110,9 +131,12 @@ struct SettingsScreen: View {
 
     private func addManual() {
         guard let url = URL(string: manualURL), url.scheme == "https" else { return }
-        store.add(Server(name: url.host() ?? "", url: url, token: manualToken))
+        let name = manualName.trimmingCharacters(in: .whitespacesAndNewlines)
+        store.add(Server(name: name.isEmpty ? (url.host() ?? "") : name,
+                         url: url, token: manualToken))
         manualURL = ""
         manualToken = ""
+        manualName = ""
     }
 }
 
