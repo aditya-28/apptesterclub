@@ -16,25 +16,20 @@ struct AppTesterClubApp: App {
                 .tint(Palette.accent)
                 .task {
                     PushDelegate.store = store
-                    await requestPush()
+                    await Push.shared.requestAuthorization(then: store.servers)
                 }
                 .onOpenURL { url in
                     // Pairing links open the app directly, so scanning with the
                     // system camera works as well as scanning in Settings.
-                    if let server = PairingLink.parse(url) { store.add(server) }
+                    guard let server = PairingLink.parse(url) else { return }
+                    store.add(server)
+                    // Tell it about this device now rather than at the next
+                    // launch, or its first build would arrive silently.
+                    Task { await Push.shared.register(with: server) }
                 }
         }
     }
 
-    /// Asking APNs for a token before the user has granted permission returns
-    /// one Apple will not deliver to, so wait for the answer.
-    private func requestPush() async {
-        let center = UNUserNotificationCenter.current()
-        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-        if granted {
-            await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
-        }
-    }
 }
 
 struct Root: View {

@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import UserNotifications
 
 struct SettingsScreen: View {
     let store: ServerStore
@@ -102,6 +103,26 @@ struct SettingsScreen: View {
             }
 
             Section {
+                LabeledContent("Permission") {
+                    Text(permissionText)
+                        .foregroundStyle(permissionColor)
+                }
+                LabeledContent("This device") {
+                    Text(Push.shared.token == nil ? "Not registered" : "Registered")
+                        .foregroundStyle(Push.shared.token == nil ? Palette.warning : Palette.success)
+                }
+                if Push.shared.token != nil {
+                    Button("Re-register with all servers") {
+                        Task { await Push.shared.register(with: store.servers) }
+                    }
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text("A build pushed to any server you are paired with arrives here. The server also needs an Apple push key configured, or nothing is sent.")
+            }
+
+            Section {
                 LabeledContent("Version") {
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
                         .monospacedDigit()
@@ -114,6 +135,7 @@ struct SettingsScreen: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await Push.shared.refreshAuthorization() }
         .sheet(item: $renaming) { server in
             RenameServerSheet(store: store, server: server)
         }
@@ -129,11 +151,29 @@ struct SettingsScreen: View {
         }
     }
 
+    private var permissionText: String {
+        switch Push.shared.authorization {
+        case .authorized, .provisional, .ephemeral: "Allowed"
+        case .denied: "Denied in Settings"
+        default: "Not asked yet"
+        }
+    }
+
+    private var permissionColor: Color {
+        switch Push.shared.authorization {
+        case .authorized, .provisional, .ephemeral: Palette.success
+        case .denied: Palette.danger
+        default: Palette.textTertiary
+        }
+    }
+
     private func addManual() {
         guard let url = URL(string: manualURL), url.scheme == "https" else { return }
         let name = manualName.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.add(Server(name: name.isEmpty ? (url.host() ?? "") : name,
-                         url: url, token: manualToken))
+        let server = Server(name: name.isEmpty ? (url.host() ?? "") : name,
+                            url: url, token: manualToken)
+        store.add(server)
+        Task { await Push.shared.register(with: server) }
         manualURL = ""
         manualToken = ""
         manualName = ""

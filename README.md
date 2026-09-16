@@ -99,6 +99,31 @@ AppTesterClub reads the profile out of the IPA at upload and tells you first:
 | **Push notifications** | Optional. Fires the moment a build lands |
 | **Three platforms** | iOS, Android and macOS |
 
+## Notifications
+
+A build pushed to your instance can reach every paired phone within seconds.
+Optional — leave it unconfigured and everything else works, silently.
+
+It needs an Apple push key, which **can only be created in the Apple Developer
+portal**. There is no API for it, and it downloads exactly once.
+
+Certificates, Identifiers & Profiles &rarr; **Keys** &rarr; **+** &rarr; tick
+**Apple Push Notifications service (APNs)** &rarr; Continue &rarr; Register, then
+download the `.p8`. Note the Key ID beside it, and your Team ID from the top
+right of the portal.
+
+```bash
+node scripts/setup-push.mjs --key ./AuthKey_ABC1234567.p8 \
+  --key-id ABC1234567 --team-id DEF1234567 --topic com.you.apptesterclub
+```
+
+`--topic` is the bundle identifier of the iOS client **you** built, not this
+repository's default. The script sets all four variables and redeploys, because
+environment variables are baked in at build time.
+
+Settings in the app shows whether this device registered, so you can tell a
+permission problem from a server one.
+
 ## Running it locally
 
 ```bash

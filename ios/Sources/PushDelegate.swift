@@ -14,17 +14,8 @@ final class PushDelegate: NSObject, UIApplicationDelegate {
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        #if DEBUG
-        let sandbox = true
-        #else
-        let sandbox = false
-        #endif
-
         Task { @MainActor in
-            guard let servers = PushDelegate.store?.servers else { return }
-            for server in servers {
-                await API(server: server).register(deviceToken: token, sandbox: sandbox)
-            }
+            await Push.shared.received(token: token, servers: PushDelegate.store?.servers ?? [])
         }
     }
 
