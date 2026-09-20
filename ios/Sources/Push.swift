@@ -29,12 +29,37 @@ final class Push {
         token = UserDefaults.standard.string(forKey: tokenKey)
     }
 
+    /// Which APNs environment this build's token belongs to.
+    ///
+    /// Not the build configuration, which is the obvious guess and wrong: a
+    /// Release build signed with a *development* profile gets a sandbox token,
+    /// registers itself as production, and every push comes back
+    /// BadDeviceToken. The entitlement is the only thing that actually decides
+    /// it, so read that.
     var isSandbox: Bool {
-        #if DEBUG
-        true
-        #else
-        false
-        #endif
+        guard
+            let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+            let data = try? Data(contentsOf: url),
+            // The profile is CMS-signed binary with a plain XML plist inside.
+            // latin1 maps every byte to a character, so the XML survives intact.
+            let text = String(data: data, encoding: .isoLatin1),
+            let start = text.range(of: "<?xml"),
+            let end = text.range(of: "</plist>"),
+            let plist = try? PropertyListSerialization.propertyList(
+                from: Data(text[start.lowerBound..<end.upperBound].utf8),
+                format: nil) as? [String: Any],
+            let entitlements = plist["Entitlements"] as? [String: Any],
+            let environment = entitlements["aps-environment"] as? String
+        else {
+            // No embedded profile means an App Store build, which is always
+            // production. Fall back to the build config only for the simulator.
+            #if DEBUG
+            return true
+            #else
+            return false
+            #endif
+        }
+        return environment == "development"
     }
 
     /// Asks once, then registers. Registering before the grant returns a token
