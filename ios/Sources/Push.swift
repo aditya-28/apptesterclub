@@ -20,6 +20,11 @@ final class Push {
     }
     private(set) var authorization: UNAuthorizationStatus = .notDetermined
 
+    /// Set when a notification is tapped, cleared once the list has navigated.
+    /// Carries the origin too, because two paired servers can hold the same app
+    /// slug and the tap has to land on the one that sent it.
+    var pending: (origin: String, slug: String)?
+
     private init() {
         token = UserDefaults.standard.string(forKey: tokenKey)
     }

@@ -14,11 +14,17 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: AppTesterClub
-        CFBundleShortVersionString: "1.5"
-        CFBundleVersion: "6"
+        CFBundleShortVersionString: "1.6"
+        CFBundleVersion: "7"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSCameraUsageDescription: Scanning the pairing code on your server connects this app to it.
+        # Without this the app never receives apptesterclub:// links at all, so
+        # scanning a pairing code with the system Camera does nothing and a
+        # notification tap cannot route anywhere.
+        CFBundleURLTypes:
+          - CFBundleURLName: club.apptester.client
+            CFBundleURLSchemes: [apptesterclub]
         # canOpenURL answers false for any scheme not listed here, and that is
         # how the app tells whether a build is already installed. Add the URL
         # scheme of every app you distribute. Apple caps this at 50.
@@ -29,8 +35,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: club.apptester.client
-        MARKETING_VERSION: "1.5"
-        CURRENT_PROJECT_VERSION: "6"
+        MARKETING_VERSION: "1.6"
+        CURRENT_PROJECT_VERSION: "7"
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1,2"

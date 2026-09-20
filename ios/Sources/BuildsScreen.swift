@@ -37,6 +37,7 @@ struct BuildsScreen: View {
     @State private var prefs = Preferences(serverKey: "")
     @State private var installers: [String: Installer] = [:]
     @State private var isEditing = false
+    @State private var deepLinked: CatalogApp?
 
     private var serverKey: String { store.selected?.id.uuidString ?? "" }
 
@@ -163,10 +164,37 @@ struct BuildsScreen: View {
                 ProgressView().controlSize(.large)
             }
         }
+        .navigationDestination(item: $deepLinked) { app in
+            HistoryScreen(app: app, installer: installer(for: app))
+        }
         .task(id: store.selectedID) {
             prefs = Preferences(serverKey: serverKey)
             await catalog.reload(server: store.selected)
         }
+        // A tapped notification names an app and the server it came from.
+        // Switching server reloads the catalogue, so the jump waits for the
+        // right list rather than opening whatever happens to be loaded.
+        .onChange(of: pendingSlug) { _, _ in Task { await followNotification() } }
+        .task { await followNotification() }
+    }
+
+    private var pendingSlug: String? { Push.shared.pending?.slug }
+
+    private func followNotification() async {
+        guard let pending = Push.shared.pending else { return }
+
+        if !pending.origin.isEmpty,
+           let target = store.servers.first(where: { $0.url.absoluteString == pending.origin }),
+           target.id != store.selected?.id {
+            store.select(target)
+            await catalog.reload(server: target)
+        } else if catalog.apps.isEmpty {
+            await catalog.reload(server: store.selected)
+        }
+
+        guard let app = catalog.apps.first(where: { $0.slug == pending.slug }) else { return }
+        deepLinked = app
+        Push.shared.pending = nil
     }
 
     private func sectionHeader(_ title: String, systemImage: String) -> some View {

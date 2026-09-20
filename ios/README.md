@@ -99,6 +99,19 @@ in the catalogue is always the number that actually shipped:
 xcodegen generate && xcodebuild ... && atc push ./AppTesterClub.ipa --app apptesterclub
 ```
 
+## Links it answers
+
+The app registers the `apptesterclub` scheme, so these open it from anywhere —
+a chat message, a CI job, the system Camera:
+
+```
+apptesterclub://pair?url=<instance>&token=<token>   pair with an instance
+apptesterclub://open?app=<slug>&origin=<instance>   jump to one app
+```
+
+`open` is the same route a tapped notification takes, which is also the only way
+to exercise that path without waiting for a real push.
+
 ## Known gaps
 
 - Server tokens are in `UserDefaults`, not the keychain. On the roadmap.

@@ -124,6 +124,21 @@ final class ServerStore {
 enum PairingLink {
     static let scheme = "apptesterclub"
 
+    /// `apptesterclub://open?app=snoopd&origin=https%3A%2F%2Fbuilds.example.com`
+    ///
+    /// The same routing a tapped notification uses, reachable as a link. Useful
+    /// on its own — a chat message or a CI job can point straight at an app —
+    /// and it means the path a notification takes is exercised by something
+    /// other than a notification.
+    static func parseOpen(_ url: URL) -> (origin: String, slug: String)? {
+        guard url.scheme == scheme, url.host == "open",
+              let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let slug = parts.queryItems?.first(where: { $0.name == "app" })?.value,
+              !slug.isEmpty
+        else { return nil }
+        return (parts.queryItems?.first(where: { $0.name == "origin" })?.value ?? "", slug)
+    }
+
     static func parse(_ url: URL) -> Server? {
         guard url.scheme == scheme, url.host == "pair",
               let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),

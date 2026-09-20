@@ -80,6 +80,9 @@ export type BuildPush = {
   body: string;
   appSlug: string;
   shareToken: string;
+  /** Which instance sent it. A phone paired with two servers can hold the same
+   *  app slug on both, so a tap needs this to land on the right one. */
+  origin: string;
 };
 
 /** Returns how many devices accepted it. Never throws: a failed push must not
@@ -115,6 +118,7 @@ export async function notify(message: BuildPush): Promise<number> {
             },
             app_slug: message.appSlug,
             share_token: message.shareToken,
+            origin: message.origin,
           }),
         });
         return res.ok;

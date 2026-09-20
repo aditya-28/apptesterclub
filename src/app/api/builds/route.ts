@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
     body: build.notes?.trim() || "A new build is ready to install.",
     appSlug: build.appSlug,
     shareToken: build.shareToken,
+    origin: req.nextUrl.origin,
   });
 
   return NextResponse.json({

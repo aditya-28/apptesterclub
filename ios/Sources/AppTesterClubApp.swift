@@ -19,6 +19,10 @@ struct AppTesterClubApp: App {
                     await Push.shared.requestAuthorization(then: store.servers)
                 }
                 .onOpenURL { url in
+                    if let target = PairingLink.parseOpen(url) {
+                        Push.shared.pending = target
+                        return
+                    }
                     // Pairing links open the app directly, so scanning with the
                     // system camera works as well as scanning in Settings.
                     guard let server = PairingLink.parse(url) else { return }
