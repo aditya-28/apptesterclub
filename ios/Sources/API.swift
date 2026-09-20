@@ -149,6 +149,10 @@ struct API: Sendable {
             "token": deviceToken,
             "platform": "ios",
             "environment": sandbox ? "sandbox" : "production",
+            // APNs addresses a push by app. Without telling the server which
+            // app this token is for, an instance serving two clients sends
+            // every push under one topic and Apple rejects the wrong ones.
+            "topic": Bundle.main.bundleIdentifier ?? "",
         ])
         _ = try? await session.data(for: request)
     }

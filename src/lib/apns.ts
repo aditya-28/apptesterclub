@@ -1,5 +1,6 @@
 import { SignJWT, importPKCS8 } from "jose";
-import { list, put } from "@vercel/blob";
+import { list, put, del } from "@vercel/blob";
+import http2 from "node:http2";
 
 /**
  * Push, for "a new build just landed".
@@ -18,16 +19,56 @@ export type Device = {
   token: string;
   platform: "ios" | "macos";
   environment: "sandbox" | "production";
+  /** The bundle identifier of the app that owns this token.
+   *
+   *  APNs addresses a push by app, not by server, so one instance serving two
+   *  different client apps cannot use a single topic — the wrong one comes back
+   *  DeviceTokenNotForTopic. Older records have none and fall back to
+   *  APNS_TOPIC. */
+  topic?: string;
   registeredAt: string;
 };
 
 export function pushConfigured(): boolean {
   return Boolean(
-    process.env.APNS_KEY_ID &&
-      process.env.APNS_TEAM_ID &&
-      process.env.APNS_PRIVATE_KEY &&
-      process.env.APNS_TOPIC,
+    process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_PRIVATE_KEY,
   );
+}
+
+/**
+ * APNs speaks HTTP/2 only and closes an HTTP/1.1 connection without a useful
+ * error, which `fetch` gives no way around — it produced nothing but "fetch
+ * failed", and because sends are caught and counted as failures, every push
+ * silently reported zero devices. Hence the raw http2 client.
+ */
+function post(
+  host: string,
+  path: string,
+  headers: Record<string, string>,
+  body: string,
+): Promise<{ status: number; reason?: string }> {
+  return new Promise((resolve) => {
+    const client = http2.connect(host);
+    const done = (result: { status: number; reason?: string }) => {
+      client.close();
+      resolve(result);
+    };
+    client.on("error", (e) => done({ status: 0, reason: e.message }));
+
+    const request = client.request({ ":method": "POST", ":path": path, ...headers });
+    let status = 0;
+    let payload = "";
+    request.setTimeout(10_000, () => done({ status: 0, reason: "timeout" }));
+    request.on("response", (h) => { status = Number(h[":status"] ?? 0); });
+    request.on("data", (chunk) => { payload += chunk; });
+    request.on("error", (e) => done({ status: 0, reason: e.message }));
+    request.on("end", () => {
+      let reason: string | undefined;
+      try { reason = payload ? (JSON.parse(payload) as { reason?: string }).reason : undefined; } catch {}
+      done({ status, reason });
+    });
+    request.end(body);
+  });
 }
 
 export async function saveDevice(device: Device): Promise<void> {
@@ -97,35 +138,51 @@ export async function notify(message: BuildPush): Promise<number> {
     return 0;
   }
 
+  const body = JSON.stringify({
+    aps: {
+      alert: { title: message.title, body: message.body },
+      sound: "default",
+      "thread-id": message.appSlug,
+    },
+    app_slug: message.appSlug,
+    share_token: message.shareToken,
+    origin: message.origin,
+  });
+
   const devices = await allDevices();
   const results = await Promise.all(
     devices.map(async (device) => {
+      const topic = device.topic ?? process.env.APNS_TOPIC;
+      if (!topic) return false;
       const host = device.environment === "sandbox" ? SANDBOX : PROD;
-      try {
-        const res = await fetch(`${host}/3/device/${device.token}`, {
-          method: "POST",
-          headers: {
-            authorization: `bearer ${jwt}`,
-            "apns-topic": process.env.APNS_TOPIC!,
-            "apns-push-type": "alert",
-            "apns-priority": "5",
-          },
-          body: JSON.stringify({
-            aps: {
-              alert: { title: message.title, body: message.body },
-              sound: "default",
-              "thread-id": message.appSlug,
-            },
-            app_slug: message.appSlug,
-            share_token: message.shareToken,
-            origin: message.origin,
-          }),
-        });
-        return res.ok;
-      } catch {
-        return false;
+      const { status, reason } = await post(
+        host,
+        `/3/device/${device.token}`,
+        {
+          authorization: `bearer ${jwt}`,
+          "apns-topic": topic,
+          "apns-push-type": "alert",
+          "apns-priority": "5",
+        },
+        body,
+      );
+      // A token Apple has retired is worth forgetting rather than retrying
+      // forever on every upload.
+      if (reason === "BadDeviceToken" || reason === "Unregistered") {
+        await forgetDevice(device.token);
       }
+      return status === 200;
     }),
   );
   return results.filter(Boolean).length;
+}
+
+/** Drops a token Apple has told us is dead. */
+async function forgetDevice(token: string): Promise<void> {
+  try {
+    const { blobs } = await list({ prefix: `${PREFIX}${token}.json`, limit: 1 });
+    if (blobs[0]) await del(blobs[0].url);
+  } catch {
+    // Best effort: a stale record costs one rejected push per upload.
+  }
 }

@@ -23,10 +23,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "token must be hex" }, { status: 400 });
   }
 
+  const bundleId = typeof body.topic === "string" ? body.topic.trim() : "";
   const device: Device = {
     token: token.toLowerCase(),
     platform,
     environment,
+    // Which app this token belongs to. Without it one instance cannot notify
+    // two different client apps: APNs addresses a push by app, not by server.
+    topic: bundleId || undefined,
     registeredAt: new Date().toISOString(),
   };
   await saveDevice(device);
