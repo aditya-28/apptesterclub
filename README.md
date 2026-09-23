@@ -101,10 +101,22 @@ Build records written before you switch carry an absolute URL rather than a
 key. Both are honoured, so old install links keep working and nothing has to be
 migrated.
 
-**Give each instance its own bucket.** The catalogue lists every object under
-`meta/`, so two instances pointed at one bucket would each show the other's
-builds and serve the other's binaries. Separate buckets in the same account are
-fine, each with its own scoped token.
+**Two instances must not share a bucket unprefixed.** The catalogue lists every
+object under `meta/`, so they would each show the other's builds and serve the
+other's binaries. Two ways out:
+
+- **Separate buckets**, each with its own scoped token. The stronger option,
+  and the default advice.
+- **One bucket, `S3_PREFIX` per instance.** Set `S3_PREFIX=tenant-a` on one and
+  `S3_PREFIX=tenant-b` on the other and each gets its own namespace inside the
+  bucket. Useful when one R2 token is scoped to a single bucket, which is what
+  Cloudflare gives you by default.
+
+  A prefix separates the catalogues, not the access. Any credential that can
+  reach the bucket can reach every prefix in it, so share one only between
+  deployments you would trust with each other's builds — including trusting
+  them not to delete them. The prefix is applied on write and stripped on read,
+  so it never appears inside a build record and a record stays portable.
 
 **Moving an instance that already has builds:**
 

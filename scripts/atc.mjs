@@ -49,6 +49,10 @@ function loadConfig() {
       accessKeyId: process.env.S3_ACCESS_KEY_ID || fromFile.s3?.accessKeyId,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || fromFile.s3?.secretAccessKey,
       region: process.env.S3_REGION || fromFile.s3?.region || "auto",
+      // Must match S3_PREFIX on the deployment. The server looks for objects
+      // under its own prefix, so an upload written anywhere else is invisible
+      // to it.
+      prefix: process.env.S3_PREFIX || fromFile.s3?.prefix || "",
     },
   };
   cfg.useS3 = Boolean(cfg.s3.bucket && cfg.s3.accessKeyId && cfg.s3.secretAccessKey && cfg.s3.endpoint);
@@ -362,8 +366,11 @@ async function upload(storageKey, bytes, contentType) {
       endpoint: cfg.s3.endpoint,
       credentials: { accessKeyId: cfg.s3.accessKeyId, secretAccessKey: cfg.s3.secretAccessKey },
     });
+    const at = cfg.s3.prefix
+      ? `${cfg.s3.prefix.replace(/^\/+|\/+$/g, "")}/${storageKey}`
+      : storageKey;
     await s3.send(new PutObjectCommand({
-      Bucket: cfg.s3.bucket, Key: storageKey, Body: bytes, ContentType: contentType,
+      Bucket: cfg.s3.bucket, Key: at, Body: bytes, ContentType: contentType,
     }));
     // The server signs a URL when one is needed; the key is what it stores.
     return { key: storageKey, url: undefined };

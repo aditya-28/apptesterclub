@@ -56,6 +56,30 @@ function s3(): S3Client {
 
 const bucket = () => process.env.S3_BUCKET!;
 
+/**
+ * An optional folder inside the bucket that this instance owns.
+ *
+ * The catalogue lists everything under `meta/`, so two instances sharing a
+ * bucket would each show the other's builds. A prefix gives each one its own
+ * namespace, which is what makes one bucket (and one set of credentials)
+ * usable by more than one deployment.
+ *
+ * It is not an access boundary. A credential that can reach the bucket can
+ * reach every prefix in it, so only share one between deployments you would
+ * trust with each other's builds. Separate buckets with separate scoped tokens
+ * are still the stronger arrangement.
+ *
+ * Applied on the way in and stripped on the way out, so the keys stored in a
+ * build record never contain it and a record stays portable between instances.
+ */
+const prefix = () => {
+  const raw = process.env.S3_PREFIX?.replace(/^\/+|\/+$/g, "");
+  return raw ? `${raw}/` : "";
+};
+
+const full = (key: string) => `${prefix()}${key}`;
+const bare = (key: string) => (key.startsWith(prefix()) ? key.slice(prefix().length) : key);
+
 export async function putObject(
   key: string,
   body: Buffer | string,
@@ -63,7 +87,7 @@ export async function putObject(
 ): Promise<void> {
   if (backend() === "s3") {
     await s3().send(
-      new PutObjectCommand({ Bucket: bucket(), Key: key, Body: body, ContentType: contentType }),
+      new PutObjectCommand({ Bucket: bucket(), Key: full(key), Body: body, ContentType: contentType }),
     );
     return;
   }
@@ -85,7 +109,7 @@ export async function putObject(
 export async function getObject(key: string): Promise<Buffer | null> {
   if (backend() === "s3") {
     try {
-      const res = await s3().send(new GetObjectCommand({ Bucket: bucket(), Key: key }));
+      const res = await s3().send(new GetObjectCommand({ Bucket: bucket(), Key: full(key) }));
       const bytes = await res.Body?.transformToByteArray();
       return bytes ? Buffer.from(bytes) : null;
     } catch {
@@ -101,18 +125,18 @@ export async function getObject(key: string): Promise<Buffer | null> {
   }
 }
 
-export async function listObjects(prefix: string): Promise<StoredObject[]> {
+export async function listObjects(searchPrefix: string): Promise<StoredObject[]> {
   if (backend() === "s3") {
     const out: StoredObject[] = [];
     let token: string | undefined;
     do {
       const res = await s3().send(
-        new ListObjectsV2Command({ Bucket: bucket(), Prefix: prefix, ContinuationToken: token }),
+        new ListObjectsV2Command({ Bucket: bucket(), Prefix: full(searchPrefix), ContinuationToken: token }),
       );
       for (const o of res.Contents ?? []) {
         if (!o.Key) continue;
         out.push({
-          key: o.Key,
+          key: bare(o.Key),
           size: o.Size ?? 0,
           uploadedAt: (o.LastModified ?? new Date()).toISOString(),
         });
@@ -121,7 +145,7 @@ export async function listObjects(prefix: string): Promise<StoredObject[]> {
     } while (token);
     return out;
   }
-  const { blobs } = await list({ prefix, limit: 1000 });
+  const { blobs } = await list({ prefix: searchPrefix, limit: 1000 });
   return blobs.map((b) => ({
     key: b.pathname,
     size: b.size ?? 0,
@@ -132,7 +156,7 @@ export async function listObjects(prefix: string): Promise<StoredObject[]> {
 export async function deleteObject(key: string): Promise<void> {
   try {
     if (backend() === "s3") {
-      await s3().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+      await s3().send(new DeleteObjectCommand({ Bucket: bucket(), Key: full(key) }));
       return;
     }
     const meta = await head(key);
@@ -156,8 +180,8 @@ export async function deleteObject(key: string): Promise<void> {
 export async function readableUrl(key: string, seconds = 3600): Promise<string> {
   if (backend() === "s3") {
     const base = process.env.S3_PUBLIC_URL?.replace(/\/+$/, "");
-    if (base) return `${base}/${key}`;
-    return getSignedUrl(s3(), new GetObjectCommand({ Bucket: bucket(), Key: key }), {
+    if (base) return `${base}/${full(key)}`;
+    return getSignedUrl(s3(), new GetObjectCommand({ Bucket: bucket(), Key: full(key) }), {
       expiresIn: seconds,
     });
   }

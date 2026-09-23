@@ -44,7 +44,11 @@ const s3cfg = {
   accessKeyId: process.env.S3_ACCESS_KEY_ID || file.s3?.accessKeyId,
   secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || file.s3?.secretAccessKey,
   region: process.env.S3_REGION || file.s3?.region || "auto",
+  prefix: (process.env.S3_PREFIX || file.s3?.prefix || "").replace(/^\/+|\/+$/g, ""),
 };
+
+/** Where an object lives in the bucket, once this instance's prefix is applied. */
+const at = (key) => (s3cfg.prefix ? `${s3cfg.prefix}/${key}` : key);
 
 const missing = [
   !blobToken && "BLOB_READ_WRITE_TOKEN",
@@ -71,11 +75,12 @@ const s3 = new S3Client({
  * bucket would each show the other's builds and serve the other's binaries.
  * Give each instance its own bucket.
  */
-const existing = await s3.send(new ListObjectsV2Command({ Bucket: s3cfg.bucket, Prefix: "meta/", MaxKeys: 1 }));
+const existing = await s3.send(new ListObjectsV2Command({ Bucket: s3cfg.bucket, Prefix: at("meta/"), MaxKeys: 1 }));
 if ((existing.KeyCount ?? 0) > 0) {
   console.error(
-    `migrate: ${s3cfg.bucket} already contains build records from another instance.\n` +
-    `         Each instance needs its own bucket, or the two catalogues merge.`,
+    `migrate: ${s3cfg.bucket}${s3cfg.prefix ? "/" + s3cfg.prefix : ""} already contains build records.\n` +
+    `         Two instances must not share one bucket and prefix, or the two\n` +
+    `         catalogues merge. Set S3_PREFIX to give this instance its own.`,
   );
   process.exit(1);
 }
@@ -105,7 +110,7 @@ let copied = 0, skipped = 0, rewritten = 0;
 for (const blob of blobs) {
   if (blob.pathname.startsWith("meta/")) continue;   // records go last, rewritten
   try {
-    await s3.send(new HeadObjectCommand({ Bucket: s3cfg.bucket, Key: blob.pathname }));
+    await s3.send(new HeadObjectCommand({ Bucket: s3cfg.bucket, Key: at(blob.pathname) }));
     skipped++;
     continue;
   } catch { /* not there yet */ }
@@ -115,7 +120,7 @@ for (const blob of blobs) {
   if (!res.ok) { console.error(`  could not read ${blob.pathname} (${res.status})`); continue; }
   await s3.send(new PutObjectCommand({
     Bucket: s3cfg.bucket,
-    Key: blob.pathname,
+    Key: at(blob.pathname),
     Body: Buffer.from(await res.arrayBuffer()),
     ContentType: res.headers.get("content-type") ?? "application/octet-stream",
   }));
@@ -144,7 +149,7 @@ for (const blob of blobs.filter((b) => b.pathname.startsWith("meta/"))) {
   if (!apply) { rewritten++; continue; }
   await s3.send(new PutObjectCommand({
     Bucket: s3cfg.bucket,
-    Key: blob.pathname,
+    Key: at(blob.pathname),
     Body: JSON.stringify(record),
     ContentType: "application/json",
   }));
