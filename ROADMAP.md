@@ -71,6 +71,11 @@ to trust.
 - [x] Pair by scanning the QR on the instance's `/pair` page
 - [x] Push registration against every paired server
 - [x] Expiry warnings before you tap a build iOS would refuse
+- [ ] **Push on Android** — the server speaks APNs only, so an Android phone
+      gets no notification when a build lands. Needs FCM alongside it: a
+      Firebase project, a service account, and a second sender in src/lib
+- [ ] **QR scanning in the Android client** — pairing links work, the camera
+      scanner is iOS-only so far
 - [ ] **Per-app notification switches** — currently all or nothing per server
 - [ ] **Tokens in the keychain** rather than UserDefaults
 - [ ] **Readable offline**, refreshing behind you
