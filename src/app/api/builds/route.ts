@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { checkUploadToken } from "@/lib/auth";
 import { notify } from "@/lib/apns";
 import { readNote } from "./[token]/note/route";
-import { putBuild, deleteBuild, allBuilds, groupIntoApps, storageReady, type Build, type Platform } from "@/lib/catalog";
+import { putBuild, deleteBuild, allBuilds, groupIntoApps, storageReady, urlFor, type Build, type Platform } from "@/lib/catalog";
 
 const PLATFORMS: Platform[] = ["ios", "android", "macos"];
 
@@ -30,12 +30,13 @@ export async function POST(req: NextRequest) {
   const platform = str("platform") as Platform;
   const version = str("version");
   const buildNumber = str("buildNumber");
+  const fileKey = str("fileKey");
   const fileUrl = str("fileUrl");
   const fileName = str("fileName");
   const bundleId = str("bundleId");
   const fileSize = typeof body.fileSize === "number" ? body.fileSize : 0;
 
-  const missing = Object.entries({ appSlug, platform, version, buildNumber, fileUrl, fileName })
+  const missing = Object.entries({ appSlug, platform, version, buildNumber, file: fileKey || fileUrl, fileName })
     .filter(([, v]) => !v)
     .map(([k]) => k);
   if (missing.length) {
@@ -77,7 +78,8 @@ export async function POST(req: NextRequest) {
     bundleId: bundleId || superseded?.bundleId,
     version,
     buildNumber,
-    fileUrl,
+    fileKey: fileKey || undefined,
+    fileUrl: fileUrl || undefined,
     fileName,
     fileSize,
     notes: str("notes") || undefined,
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
     branch: str("branch") || undefined,
     minOs: str("minOs") || undefined,
     urlScheme: str("urlScheme") || superseded?.urlScheme,
+    iconKey: str("iconKey") || superseded?.iconKey,
     iconUrl: str("iconUrl") || superseded?.iconUrl,
     profileName: str("profileName") || undefined,
     profileType: (str("profileType") || undefined) as Build["profileType"],
@@ -146,7 +149,9 @@ export async function GET(req: NextRequest) {
         name: a.name,
         platform: a.platform,
         bundleId: a.bundleId ?? null,
-        iconUrl: a.builds.find((b) => b.iconUrl)?.iconUrl ?? null,
+        iconUrl: await urlFor(
+          a.builds.find((b) => b.iconKey)?.iconKey,
+          a.builds.find((b) => b.iconUrl)?.iconUrl) || null,
         builds: await Promise.all(a.builds.map(async (b) => ({
           shareToken: b.shareToken,
           version: b.version,
@@ -158,7 +163,7 @@ export async function GET(req: NextRequest) {
           branch: b.branch ?? null,
           minOs: b.minOs ?? null,
           urlScheme: b.urlScheme ?? null,
-          iconUrl: b.iconUrl ?? null,
+          iconUrl: await urlFor(b.iconKey, b.iconUrl) || null,
           userNote: await readNote(b.shareToken),
           profileType: b.profileType ?? null,
           profileExpiresAt: b.profileExpiresAt ?? null,
@@ -172,7 +177,7 @@ export async function GET(req: NextRequest) {
               ? `itms-services://?action=download-manifest&url=${encodeURIComponent(
                   `${origin}/api/manifest/${b.shareToken}`,
                 )}`
-              : b.fileUrl,
+              : await urlFor(b.fileKey, b.fileUrl),
         }))),
       }))),
     },

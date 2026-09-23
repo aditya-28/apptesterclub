@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBuild } from "@/lib/catalog";
+import { getBuild, urlFor } from "@/lib/catalog";
 
 /** XML has five characters that must never appear raw. A build name with an
  *  ampersand in it would otherwise produce a manifest iOS refuses to parse. */
@@ -26,6 +26,11 @@ export async function GET(
     return new NextResponse("Build has no bundle identifier", { status: 409 });
   }
 
+  // Signed here rather than stored: a presigned URL expires, and the manifest
+  // is fetched moments before the download, so each request gets a fresh one.
+  const binary = await urlFor(build.fileKey, build.fileUrl);
+  if (!binary) return new NextResponse("Build has no file", { status: 409 });
+
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -39,7 +44,7 @@ export async function GET(
           <key>kind</key>
           <string>software-package</string>
           <key>url</key>
-          <string>${xml(build.fileUrl)}</string>
+          <string>${xml(binary)}</string>
         </dict>
       </array>
       <key>metadata</key>

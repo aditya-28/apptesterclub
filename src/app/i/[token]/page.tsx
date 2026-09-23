@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
-import { getBuild, formatSize, platformLabel } from "@/lib/catalog";
+import { getBuild, formatSize, platformLabel, urlFor } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export default async function Install({
   const manifestUrl = `${origin}/api/manifest/${token}`;
   const installHref = isIOS
     ? `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`
-    : build.fileUrl;
+    : await urlFor(build.fileKey, build.fileUrl);
 
   const expiresIn = daysUntil(build.profileExpiresAt);
   const expired = expiresIn !== null && expiresIn < 0;

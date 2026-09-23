@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { head } from "@vercel/blob";
+import { getObject } from "@/lib/storage";
 import { getBuild } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +16,10 @@ type Result = {
 
 async function readResult(nonce: string): Promise<Result | null> {
   if (!/^[0-9a-f]{32}$/.test(nonce)) return null;
+  const raw = await getObject(`enroll/${nonce}.json`);
+  if (!raw) return null;
   try {
-    const meta = await head(`enroll/${nonce}.json`);
-    const res = await fetch(meta.url, { cache: "no-store" });
-    return res.ok ? ((await res.json()) as Result) : null;
+    return JSON.parse(raw.toString()) as Result;
   } catch {
     return null;
   }

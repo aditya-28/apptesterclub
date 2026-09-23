@@ -12,7 +12,12 @@
  * Config, from the environment or ~/.atc.json:
  *   ATC_URL             https://atc.example.com
  *   ATC_UPLOAD_TOKEN    bearer token the API checks
- *   BLOB_READ_WRITE_TOKEN  Vercel Blob write token
+ *
+ * ...plus storage credentials, because the binary goes straight there rather
+ * than through the API. Either S3-compatible (Cloudflare R2, MinIO, AWS):
+ *   S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
+ * or Vercel Blob:
+ *   BLOB_READ_WRITE_TOKEN
  */
 
 import { readFileSync, statSync, existsSync, writeFileSync, unlinkSync, mkdtempSync, rmSync } from "node:fs";
@@ -20,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { basename, extname, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { put } from "@vercel/blob";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 // ---------------------------------------------------------------- config
 
@@ -37,14 +43,25 @@ function loadConfig() {
     url: process.env.ATC_URL || fromFile.url,
     uploadToken: process.env.ATC_UPLOAD_TOKEN || fromFile.uploadToken,
     blobToken: process.env.BLOB_READ_WRITE_TOKEN || fromFile.blobToken,
+    s3: {
+      endpoint: process.env.S3_ENDPOINT || fromFile.s3?.endpoint,
+      bucket: process.env.S3_BUCKET || fromFile.s3?.bucket,
+      accessKeyId: process.env.S3_ACCESS_KEY_ID || fromFile.s3?.accessKeyId,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || fromFile.s3?.secretAccessKey,
+      region: process.env.S3_REGION || fromFile.s3?.region || "auto",
+    },
   };
-  const missing = Object.entries(cfg)
-    .filter(([, v]) => !v)
-    .map(([k]) => k);
+  cfg.useS3 = Boolean(cfg.s3.bucket && cfg.s3.accessKeyId && cfg.s3.secretAccessKey && cfg.s3.endpoint);
+
+  const missing = [];
+  if (!cfg.url) missing.push("url");
+  if (!cfg.uploadToken) missing.push("uploadToken");
+  // One storage backend has to be configured; which one is the operator's call.
+  if (!cfg.useS3 && !cfg.blobToken) missing.push("blobToken (or the S3_* settings)");
   if (missing.length) {
     die(
       `Missing config: ${missing.join(", ")}.\n` +
-        `Set them in the environment or in ~/.atc.json as {"url":..., "uploadToken":..., "blobToken":...}`,
+        `Set them in the environment or in ~/.atc.json.`,
     );
   }
   cfg.url = cfg.url.replace(/\/+$/, "");
@@ -334,31 +351,44 @@ const key = `builds/${appSlug}/${version}-${buildNumber}-${stamp}/${fileName}`;
 
 console.log(`atc: uploading ${fileName} (${(size / 1048576).toFixed(1)} MB)`);
 
-const blob = await put(key, readFileSync(file), {
-  access: "public",
-  token: cfg.blobToken,
-  contentType:
-    platform === "ios"
-      ? "application/octet-stream"
-      : platform === "android"
-        ? "application/vnd.android.package-archive"
-        : "application/octet-stream",
-  addRandomSuffix: false,
-});
+/**
+ * Straight from this machine to storage. The API only ever sees metadata, so
+ * serverless request limits never cap the binary size.
+ */
+async function upload(storageKey, bytes, contentType) {
+  if (cfg.useS3) {
+    const s3 = new S3Client({
+      region: cfg.s3.region,
+      endpoint: cfg.s3.endpoint,
+      credentials: { accessKeyId: cfg.s3.accessKeyId, secretAccessKey: cfg.s3.secretAccessKey },
+    });
+    await s3.send(new PutObjectCommand({
+      Bucket: cfg.s3.bucket, Key: storageKey, Body: bytes, ContentType: contentType,
+    }));
+    // The server signs a URL when one is needed; the key is what it stores.
+    return { key: storageKey, url: undefined };
+  }
+  const blob = await put(storageKey, bytes, {
+    access: "public", token: cfg.blobToken, contentType, addRandomSuffix: false,
+  });
+  return { key: undefined, url: blob.url };
+}
+
+const stored = await upload(
+  key,
+  readFileSync(file),
+  platform === "android" ? "application/vnd.android.package-archive" : "application/octet-stream",
+);
 
 // The icon is small and rarely changes, but it is keyed per build so an app
 // that rebrands does not retroactively relabel its own history.
-let iconUrl;
+let iconKey, iconUrl;
 if (platform === "ios") {
   const icon = extractIcon(file);
   if (icon) {
-    const put_ = await put(`icons/${appSlug}/${version}-${buildNumber}-${stamp}.png`, icon, {
-      access: "public",
-      token: cfg.blobToken,
-      contentType: "image/png",
-      addRandomSuffix: false,
-    });
-    iconUrl = put_.url;
+    const placed = await upload(`icons/${appSlug}/${version}-${buildNumber}-${stamp}.png`, icon, "image/png");
+    iconKey = placed.key;
+    iconUrl = placed.url;
   }
 }
 
@@ -377,12 +407,14 @@ const res = await fetch(`${cfg.url}/api/builds`, {
     bundleId,
     version,
     buildNumber,
-    fileUrl: blob.url,
+    fileKey: stored.key,
+    fileUrl: stored.url,
     fileName,
     fileSize: size,
     notes: flags.notes,
     minOs: flags["min-os"] || fromIpa.minOs,
     urlScheme: flags["url-scheme"] || fromIpa.urlScheme,
+    iconKey,
     iconUrl,
     ...prov,
     gitSha,

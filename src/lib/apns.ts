@@ -1,5 +1,5 @@
 import { SignJWT, importPKCS8 } from "jose";
-import { list, put, del } from "@vercel/blob";
+import { putObject, getObject, listObjects, deleteObject } from "./storage";
 import http2 from "node:http2";
 
 /**
@@ -74,21 +74,17 @@ function post(
 export async function saveDevice(device: Device): Promise<void> {
   // One immutable record per token, same reasoning as the build catalogue: a
   // rewritten object is served stale from the CDN for a minute.
-  await put(`${PREFIX}${device.token}.json`, JSON.stringify(device), {
-    access: "public",
-    contentType: "application/json",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-  });
+  await putObject(`${PREFIX}${device.token}.json`, JSON.stringify(device), "application/json");
 }
 
 export async function allDevices(): Promise<Device[]> {
-  const { blobs } = await list({ prefix: PREFIX, limit: 1000 });
+  const objects = await listObjects(PREFIX);
   const rows = await Promise.all(
-    blobs.map(async (b) => {
+    objects.map(async (o) => {
+      const raw = await getObject(o.key);
+      if (!raw) return null;
       try {
-        const res = await fetch(b.url, { cache: "no-store" });
-        return res.ok ? ((await res.json()) as Device) : null;
+        return JSON.parse(raw.toString()) as Device;
       } catch {
         return null;
       }
@@ -179,10 +175,5 @@ export async function notify(message: BuildPush): Promise<number> {
 
 /** Drops a token Apple has told us is dead. */
 async function forgetDevice(token: string): Promise<void> {
-  try {
-    const { blobs } = await list({ prefix: `${PREFIX}${token}.json`, limit: 1 });
-    if (blobs[0]) await del(blobs[0].url);
-  } catch {
-    // Best effort: a stale record costs one rejected push per upload.
-  }
+  await deleteObject(`${PREFIX}${token}.json`);
 }

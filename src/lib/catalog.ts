@@ -1,4 +1,4 @@
-import { put, head, list, del } from "@vercel/blob";
+import { putObject, getObject, listObjects, deleteObject, readableUrl, storageReady as ready } from "./storage";
 
 /**
  * One immutable JSON record per build, named by its share token.
@@ -26,7 +26,10 @@ export type Build = {
   bundleId?: string;
   version: string;
   buildNumber: string;
-  fileUrl: string;
+  /** Storage key for the binary. Records written before the storage layer
+   *  existed carry an absolute `fileUrl` instead; both are honoured. */
+  fileKey?: string;
+  fileUrl?: string;
   fileName: string;
   fileSize: number;
   notes?: string;
@@ -36,6 +39,7 @@ export type Build = {
   /** From the IPA's CFBundleURLTypes. Lets a client detect that the app is
    *  installed and offer to open it. */
   urlScheme?: string;
+  iconKey?: string;
   iconUrl?: string;
   /** Read out of the IPA's embedded.mobileprovision at upload time. This is what
    *  lets a client say "this build will not install on your device" before the
@@ -62,47 +66,45 @@ const PREFIX = "meta/";
  *  that lists builds fails, so it is checked up front and reported as a setup
  *  step rather than surfacing as a 500 from deep inside the SDK. */
 export function storageReady(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return ready();
+}
+
+/** A URL a browser or Apple's install daemon can fetch. Prefers the storage
+ *  key, falling back to the absolute URL on older records. */
+export async function urlFor(key?: string, legacy?: string): Promise<string> {
+  if (key) return readableUrl(key);
+  return legacy ?? "";
 }
 const recordPath = (token: string) => `${PREFIX}${token}.json`;
 
 export async function putBuild(build: Build): Promise<void> {
-  await put(recordPath(build.shareToken), JSON.stringify(build), {
-    access: "public",
-    contentType: "application/json",
-    addRandomSuffix: false,
-  });
+  await putObject(recordPath(build.shareToken), JSON.stringify(build), "application/json");
 }
 
 export async function deleteBuild(token: string): Promise<void> {
-  try {
-    const meta = await head(recordPath(token));
-    await del(meta.url);
-  } catch {
-    // Already gone is the outcome we wanted.
-  }
+  await deleteObject(recordPath(token));
 }
 
 /** Reading one build by token. The record is immutable, so this is exact. */
 export async function getBuild(token: string): Promise<Build | null> {
   if (!/^[0-9a-f]{32}$/.test(token)) return null;
+  const raw = await getObject(recordPath(token));
+  if (!raw) return null;
   try {
-    const meta = await head(recordPath(token));
-    const res = await fetch(meta.url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json()) as Build;
+    return JSON.parse(raw.toString()) as Build;
   } catch {
     return null;
   }
 }
 
 export async function allBuilds(): Promise<Build[]> {
-  const { blobs } = await list({ prefix: PREFIX, limit: 1000 });
+  const objects = await listObjects(PREFIX);
   const records = await Promise.all(
-    blobs.map(async (b) => {
+    objects.map(async (o) => {
+      const raw = await getObject(o.key);
+      if (!raw) return null;
       try {
-        const res = await fetch(b.url, { cache: "no-store" });
-        return res.ok ? ((await res.json()) as Build) : null;
+        return JSON.parse(raw.toString()) as Build;
       } catch {
         return null;
       }

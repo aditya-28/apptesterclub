@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, randomUUID } from "crypto";
-import { put } from "@vercel/blob";
+import { putObject } from "@/lib/storage";
 import { getBuild } from "@/lib/catalog";
 
 /**
@@ -101,7 +101,7 @@ export async function POST(
   // The result is keyed by a random nonce rather than carried in the URL, so a
   // device identifier never ends up in a query string, a log, or a referrer.
   const nonce = randomBytes(16).toString("hex");
-  await put(
+  await putObject(
     `enroll/${nonce}.json`,
     JSON.stringify({
       udid,
@@ -112,7 +112,7 @@ export async function POST(
       eligible,
       checkedAt: new Date().toISOString(),
     }),
-    { access: "public", contentType: "application/json", addRandomSuffix: false },
+    "application/json",
   );
 
   // iOS follows this redirect in Safari once the profile finishes.

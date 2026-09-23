@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { put, list } from "@vercel/blob";
+import { putObject, getObject, listObjects } from "@/lib/storage";
 import { checkUploadToken } from "@/lib/auth";
 import { getBuild, storageReady } from "@/lib/catalog";
 
@@ -49,10 +49,10 @@ export async function POST(
     return NextResponse.json({ error: "note is too long (2000 characters max)" }, { status: 400 });
   }
 
-  await put(
+  await putObject(
     `${prefix(token)}${Date.now()}-${randomUUID()}.json`,
     JSON.stringify({ text, at: new Date().toISOString() }),
-    { access: "public", contentType: "application/json", addRandomSuffix: false },
+    "application/json",
   );
 
   return NextResponse.json({ ok: true, text });
@@ -61,13 +61,13 @@ export async function POST(
 /** The newest note for one build, or null. Empty text means it was cleared. */
 export async function readNote(token: string): Promise<string | null> {
   try {
-    const { blobs } = await list({ prefix: prefix(token), limit: 1000 });
-    if (blobs.length === 0) return null;
-    // Filenames start with the timestamp, so lexical order is chronological.
-    const newest = blobs.sort((a, b) => b.pathname.localeCompare(a.pathname))[0];
-    const res = await fetch(newest.url, { cache: "no-store" });
-    if (!res.ok) return null;
-    const { text } = (await res.json()) as { text: string };
+    const objects = await listObjects(prefix(token));
+    if (objects.length === 0) return null;
+    // Keys start with the timestamp, so lexical order is chronological.
+    const newest = objects.sort((a, b) => b.key.localeCompare(a.key))[0];
+    const raw = await getObject(newest.key);
+    if (!raw) return null;
+    const { text } = JSON.parse(raw.toString()) as { text: string };
     return text || null;
   } catch {
     return null;
