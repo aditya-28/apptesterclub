@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Downloads land in the app's own cache, so they are cleaned up with the
+         app and never touch shared storage. -->
+    <cache-path name="builds" path="builds/" />
+</paths>

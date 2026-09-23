@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- A box with a downward arrow: a build, arriving. -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M54,30 L54,58 M54,62 L44,52 M54,62 L64,52"
+        android:strokeColor="#FFFFFF" android:strokeWidth="4"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4"
+        android:fillColor="#00000000" android:strokeLineCap="round"
+        android:pathData="M38,66 L38,74 L70,74 L70,66" />
+</vector>
