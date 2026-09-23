@@ -15,6 +15,10 @@ over-the-air install), and its free tier covers a solo developer. Supporting
 every host would mean solving storage, TLS and deployment three times over for
 an audience that has not asked yet.
 
+- [x] **S3-compatible storage** — Cloudflare R2, MinIO, Backblaze, AWS. Chosen
+      by configuration alone; leave the S3 variables unset and Vercel Blob is
+      used, so an existing deployment is untouched. Records written before the
+      switch keep an absolute URL and still resolve.
 - [x] **One-click deploy** button that also provisions storage.
 - [x] **Setup screen** instead of a crash when an instance is not finished
       being configured. A fresh deployment with no storage used to throw a 500
@@ -73,10 +77,10 @@ to trust.
 
 ## After 1.0
 
-- **Storage adapters** — local filesystem and S3-compatible, for operators who
-  will not use Vercel. Worth doing once someone asks; any adapter must preserve
-  write-once records, see CONTRIBUTING.md for why
-- **Docker image**, which only becomes meaningful alongside those adapters
+- **Local filesystem storage**, for a self-hosted instance with a disk. The
+  S3-compatible adapter already landed, so the interface it would implement
+  exists; see `src/lib/storage.ts`
+- **Docker image**, which only becomes meaningful alongside that adapter
 - Release channels — internal, beta and release as separate streams
 - Size change warnings — "40% larger than the last build" catches a bundled asset
 - Release notes drafted from commits since the previous build

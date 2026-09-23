@@ -46,15 +46,17 @@ Authentication to Disabled.
 Your instance is still protected: the web pages need `ATC_PASSWORD`, the API
 needs `ATC_UPLOAD_TOKEN`, and install links carry a 128-bit unguessable token.
 
-**2. Get the blob token for the CLI.** The command line uploads binaries
-straight to storage, so it needs the same token the deployment has:
+**2. Give the CLI the same storage credentials.** The command line uploads
+binaries straight to storage rather than through the API, so serverless request
+limits never cap the size of a build. That means it needs the credentials the
+deployment has.
+
+On Vercel Blob:
 
 ```bash
 npx vercel env pull .env.production --environment=production
 grep BLOB_READ_WRITE_TOKEN .env.production
 ```
-
-Put that, the instance URL and your upload token into `~/.atc.json`:
 
 ```json
 {
@@ -63,6 +65,41 @@ Put that, the instance URL and your upload token into `~/.atc.json`:
   "blobToken": "vercel_blob_rw_..."
 }
 ```
+
+On S3-compatible storage, the `s3` block replaces `blobToken`:
+
+```json
+{
+  "url": "https://your-instance.vercel.app",
+  "uploadToken": "...",
+  "s3": {
+    "endpoint": "https://<account-id>.r2.cloudflarestorage.com",
+    "region": "auto",
+    "bucket": "your-bucket",
+    "accessKeyId": "...",
+    "secretAccessKey": "..."
+  }
+}
+```
+
+`chmod 600 ~/.atc.json` — it holds a write credential.
+
+### Storage backends
+
+Vercel Blob by default. Set `S3_BUCKET` and `S3_ACCESS_KEY_ID` and it uses that
+instead: Cloudflare R2, MinIO, Backblaze B2 or AWS S3, same adapter. R2 is the
+reason this exists, because an IPA is re-downloaded on every install by every
+tester and R2 charges nothing for egress.
+
+Download links are signed when one is needed and expire in an hour. Apple's
+install daemon cannot authenticate, so the object has to be fetchable without
+credentials; signing it at manifest time gives that without leaving a leaked
+install link working forever. Set `S3_PUBLIC_URL` to serve from a public bucket
+instead.
+
+Build records written before you switch carry an absolute URL rather than a
+key. Both are honoured, so old install links keep working and nothing has to be
+migrated.
 
 That is the whole setup. The free tier is enough for one developer, and TLS —
 which iOS requires for over-the-air install — comes with it.
