@@ -101,6 +101,27 @@ Build records written before you switch carry an absolute URL rather than a
 key. Both are honoured, so old install links keep working and nothing has to be
 migrated.
 
+**Give each instance its own bucket.** The catalogue lists every object under
+`meta/`, so two instances pointed at one bucket would each show the other's
+builds and serve the other's binaries. Separate buckets in the same account are
+fine, each with its own scoped token.
+
+**Moving an instance that already has builds:**
+
+```bash
+npx vercel env pull .env.production --environment=production
+set -a && . ./.env.production && set +a     # the blob token
+export S3_ENDPOINT=... S3_BUCKET=... S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...
+
+node scripts/migrate-storage.mjs            # report what would happen
+node scripts/migrate-storage.mjs --apply    # copy, and rewrite the records
+```
+
+It is re-runnable and never deletes anything from Blob. Verify a real install
+off the new storage before removing the old copy, and remove
+`BLOB_READ_WRITE_TOKEN` from the deployment afterwards so there is no silent
+fallback.
+
 That is the whole setup. The free tier is enough for one developer, and TLS —
 which iOS requires for over-the-air install — comes with it.
 
